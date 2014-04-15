@@ -1,0 +1,1 @@
+http://thelonedba.wordpress.com/2012/09/12/querying-sql-server-event-logs-to-search-for-dbcc-checkdb-output/
