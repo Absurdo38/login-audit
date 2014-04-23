@@ -1,3 +1,4 @@
+import java.text.SimpleDateFormat;
 import java.text.DateFormat;
 import java.util.regex.Matcher;
 import java.sql.ResultSet;
@@ -21,7 +22,8 @@ import org.apache.commons.lang.StringEscapeUtils;
 
 enum Principal{
     NOT_IN_LIST,
-    NOT_IN_LOG;
+    NOT_IN_LOG,
+    ACTIVE;
 }
 
 enum LoginType{
@@ -38,7 +40,7 @@ class LogRecord{
 
 class UserInfo{
     String server;
-    Principal principal;
+    Principal principal = Principal.ACTIVE;
     Map<String,LogRecord> ipMap = [:]; 
 }
 
@@ -75,6 +77,9 @@ def getLogCount(Connection connection){
 }
 
 def getNotNull(Object o){
+    if (o instanceof Date){
+        return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US).format(o);
+    }
     return o == null? "" : o.toString();
 }
 
@@ -94,7 +99,6 @@ println "<td>Log Records Since</td>"
 println "</tr>"
 
 Pattern PATTERN = Pattern.compile("Login (succeeded|failed) for user '([^']+)'[^\\[]+\\[CLIENT: ([^\\]]*)\\]\\s*");
-DateFormat
 
 connectionSrv = dbm.getService(ConnectionService.class)
 
