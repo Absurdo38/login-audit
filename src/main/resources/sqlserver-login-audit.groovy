@@ -79,18 +79,8 @@ def getNotNull(Object o){
 }
 
 
-println """<table cellspacing="0" class="simple-table" border="1">"""
-println "<colgroup/>
-println "<colgroup/>
-println "<colgroup/>
-println "<colgroup/>
-println "<colgroup/>
-println "<colgroup/>
-println "<colgroup/>
-println "<colgroup align='right'/>
-println "<colgroup align='right'/>
-println "<colgroup/>
-println """"<tr style="background-color:#EEE">"""
+println """<table cellspacing='0' class='simple-table' border='1'>"""
+println """<tr style="background-color:#EEE">"""
 println "<td>Server</td>"
 println "<td>Principal</td>"
 println "<td>Type</td>"
@@ -228,8 +218,8 @@ dbConnections.each{ connectionInfo ->
                 println "<td>${StringEscapeUtils.escapeHtml(getNotNull(e2.getKey()))}</td>"
                 println "<td>${getNotNull(r.lastSuccessDate)}</td>"
                 println "<td>${getNotNull(r.lastFailedDate)}</td>"
-                println "<td>${r.successCount}</td>"
-                println "<td>${r.failedCount}</td>"
+                println "<td style='text-align:right'>${r.successCount}</td>"
+                println "<td style='text-align:right'>${r.failedCount}</td>"
                 println "<td>${getNotNull(since)}</td>"
                 println "</tr>"
             }
