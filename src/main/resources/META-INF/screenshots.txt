@@ -1,0 +1,1 @@
+sqlserver-login-audit-001.png=Sample output for counters

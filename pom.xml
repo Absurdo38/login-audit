@@ -5,15 +5,15 @@
 
     <artifactId>sqlserver-login-audit</artifactId>
 
-    <name>Sqlserver login audit</name>
-    <description>A DBMaster plugin that parses native sql server logs to get aggregated logon statistics</description>
+    <name>SQL Server login audit</name>
+    <description>Parses native sql server logs to get aggregated logon statistics</description>
 
-    <version>0.0.1</version>
+    <version>0.3.0</version>
     <packaging>bundle</packaging>
 
     <parent>
         <groupId>io.dbmaster.tools</groupId>
-        <artifactId>parent-pom</artifactId>
+        <artifactId>dbmaster-root</artifactId>
         <version>1.0.0</version>
     </parent>
 
@@ -36,6 +36,8 @@
                 <extensions>true</extensions>
                 <configuration>
                     <instructions>
+                        <Tags>inventory,sqlserver,audit,security</Tags>
+                        <Author>slava.christin</Author>
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
                         <Import-Package>io.dbmaster.api;version="1.7.0",!org.slf4j.*</Import-Package>
                     </instructions>
