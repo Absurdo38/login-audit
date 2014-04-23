@@ -91,6 +91,9 @@ println "<td>Principal</td>"
 println "<td>Type</td>"
 println "<td>Status</td>"
 println "<td>Source</td>"
+if (p_resolve_hosts){
+    println "<td>Host</td>"
+}
 println "<td>Last Success Time</td>"
 println "<td>Last Failed Time</td>"
 println "<td>Successed Logins</td>"
@@ -220,6 +223,18 @@ dbConnections.each{ connectionInfo ->
                 println "<td>${getNotNull(r.loginType)}</td>"
                 println "<td>${getNotNull(i.principal)}</td>"
                 println "<td>${StringEscapeUtils.escapeHtml(getNotNull(e2.getKey()))}</td>"
+                if (p_resolve_hosts){
+                    String ip = e2.getKey();
+                    println "<td>"
+                    if (ip != null){
+                        try{
+                            print InetAddress.getByName(ip).getCanonicalHostName();
+                        } catch (UnknownHostException uhe){
+                            print StringEscapeUtils.escapeHtml(ip);
+                        } 
+                    }
+                    println "</td>"
+                }
                 println "<td>${getNotNull(r.lastSuccessDate)}</td>"
                 println "<td>${getNotNull(r.lastFailedDate)}</td>"
                 println "<td style='text-align:right'>${r.successCount}</td>"
