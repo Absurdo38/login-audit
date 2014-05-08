@@ -163,14 +163,14 @@ dbConnections.each{ connectionInfo ->
         Date since = null
         for (int i=0; i<=count; ++i){
             statement = connection.createStatement()
-            logger.info("Parsing file ${i}")
+            logger.debug("Parsing file ${i} of ${count+1}")
             rs = statement.executeQuery("exec sp_readerrorlog ${i},1,'login'")
             while (rs.next()){
                 if ("Logon".equals(rs.getString(2))) {
                     String msg = rs.getString(3)
                     Matcher matcher = PATTERN.matcher(msg.trim())
                     if (!matcher.matches()) {
-                        logger.warn("Unexpected format for login message: '{}'", StringEscapeUtils.escapeHtml(msg))
+                        logger.warn("Unexpected format of login message: '{}'", StringEscapeUtils.escapeHtml(msg))
                         continue
                     }
                     boolean success = "succeeded".equals(matcher.group(1))
@@ -188,10 +188,9 @@ dbConnections.each{ connectionInfo ->
                     UserInfo userInfo = userMap.get(user)
                     if (userInfo == null) {
                         userInfo = new UserInfo()
-                        userInfo.server = serverName;
-                        // userInfo.server = serverName;
+                        userInfo.server = serverName
                         if (!sqlServerPrincipals.containsKey(user)) {
-                            userInfo.logStatus = PrincipalLogStatus.NOT_ON_SERVER;
+                            userInfo.logStatus = PrincipalLogStatus.NOT_ON_SERVER
                         } else {
                             userInfo.principalDisabled = sqlServerPrincipals.get(user)["disabled"]
                         }
@@ -207,11 +206,6 @@ dbConnections.each{ connectionInfo ->
                         rec = new LogRecord()
                         rec.sourceIP = ip
                         rec.principalType = principalTypeFromLog
-                        /*if (userInfo.principal == Principal.NOT_ON_SERVER) {
-                           rec.loginType = msg.contains("Windows authentication")? PrincipalType.WINDOWS_LOGIN : LoginType.SQL_LOGIN;
-                        } else {
-                           rec.loginType = sqlServerPrincipals.get(user)
-                        }*/
                         userInfo.ipMap.put(ip+principalTypeFromLog, rec)
                     }
                     
