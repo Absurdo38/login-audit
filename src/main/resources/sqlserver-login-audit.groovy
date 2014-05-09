@@ -20,32 +20,37 @@ import com.branegy.dbmaster.connection.JdbcConnector
 
 import org.apache.commons.lang.StringEscapeUtils;
 
-enum Principal{
-    NOT_IN_LIST,
-    NOT_IN_LOG,
-    ACTIVE;
+enum PrincipalLogStatus { NOT_ON_SERVER, NOT_IN_LOG, ACTIVE }
+
+enum PrincipalType { SQL_LOGIN, WINDOWS_LOGIN, UNKNOWN }
+
+def MESSAGE_TO_TYPES = [ "Windows authentication"   : PrincipalType.WINDOWS_LOGIN,
+                        "Connection: trusted"       : PrincipalType.WINDOWS_LOGIN,
+                        "Connection: non-trusted"   : PrincipalType.SQL_LOGIN,
+                        "SQL Server authentication" : PrincipalType.SQL_LOGIN
+                       ]
+
+
+class LogRecord {
+    String sourceIP
+    PrincipalType principalType
+    Date lastSuccessDate
+    Date lastFailedDate
+    int successCount
+    int failedCount
 }
 
-enum LoginType{
-    SQL_LOGIN, WINDOWS_LOGIN;
+class UserInfo {
+    String server
+    // NULL means we don't know
+    Boolean principalDisabled
+    PrincipalLogStatus logStatus = PrincipalLogStatus.ACTIVE
+    // map of ip_address+principalType (we can find logins of different type at sql server and in log)
+    Map<String, LogRecord> ipMap = [:]
 }
 
-class LogRecord{
-    LoginType loginType;
-    Date lastSuccessDate;
-    Date lastFailedDate;
-    int successCount;
-    int failedCount;
-}
-
-class UserInfo{
-    String server;
-    Principal principal = Principal.ACTIVE;
-    Map<String,LogRecord> ipMap = [:]; 
-}
-
-def getLastDate(Date src,Date newDate){
-   if (src == null){
+def getMaxDate(Date src,Date newDate) {
+   if (src == null) {
        return newDate;
    } else if (newDate.after(src)){
        return newDate;
@@ -54,33 +59,33 @@ def getLastDate(Date src,Date newDate){
    }
 }
 
-def getFirstDate(Date src,Date newDate){
-    if (src == null){
+def getMinDate(Date src,Date newDate) {
+    if (src == null) {
         return newDate;
-    } else if (newDate.before(src)){
+    } else if (newDate.before(src)) {
         return newDate;
     } else {
         return src;
     }
  }
 
-def getLogCount(Connection connection){
-    Statement statement = connection.createStatement();
-    ResultSet rs = statement.executeQuery("exec master.dbo.xp_enumerrorlogs");
-    int count = 0;
-    while (rs.next()){
-        count = Math.max(count,rs.getInt(1));
+def getLogCount(Connection connection) {
+    Statement statement = connection.createStatement()
+    ResultSet rs = statement.executeQuery("exec master.dbo.xp_enumerrorlogs")
+    int count = 0
+    while (rs.next()) {
+        count = Math.max(count,rs.getInt(1))
     }
-    rs.close();
-    statement.close();
-    return count;
+    rs.close()
+    statement.close()
+    return count
 }
 
-def getNotNull(Object o){
-    if (o instanceof Date){
-        return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US).format(o);
+def getNotNull(Object o) {
+    if (o instanceof Date) {
+        return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US).format(o)
     }
-    return o == null? "" : o.toString();
+    return o == null? "" : o.toString()
 }
 
 
@@ -88,16 +93,17 @@ println """<table cellspacing='0' class='simple-table' border='1'>"""
 println """<tr style="background-color:#EEE">"""
 println "<td>Server</td>"
 println "<td>Principal</td>"
+println "<td>Principal Status</td>"
 println "<td>Type</td>"
-println "<td>Status</td>"
 println "<td>Source</td>"
-if (p_resolve_hosts){
+if (p_resolve_hosts) {
     println "<td>Host</td>"
 }
+println "<td>Successful Logins</td>"
 println "<td>Last Success Time</td>"
-println "<td>Last Failed Time</td>"
-println "<td>Successed Logins</td>"
 println "<td>Failed Logins</td>"
+println "<td>Last Failed Time</td>"
+println "<td>Principal Log Status</td>"
 println "<td>Log Records Since</td>"
 println "</tr>"
 
@@ -114,7 +120,7 @@ if (p_servers!=null && p_servers.size()>0) {
 
 dbConnections.each{ connectionInfo ->
     try {
-        def userMap = [:];
+        def userMap = [:]
         def serverName = connectionInfo.getName()
         connector = ConnectionProvider.getConnector(connectionInfo)
         if (!(connector instanceof JdbcConnector)) {
@@ -124,129 +130,159 @@ dbConnections.each{ connectionInfo ->
             logger.info("Connecting to ${serverName}")
         }
         
-        connection = connector.getJdbcConnection(null);
-        dbm.closeResourceOnExit(connection);
+        connection = connector.getJdbcConnection(null)
+        dbm.closeResourceOnExit(connection)
     
         // login list
-        def loginMap = [:]
-        statement = connection.createStatement();
-        rs = statement.executeQuery("select name, CASE WHEN type_desc = 'SQL_LOGIN' THEN 0 ELSE 1 END from sys.server_principals where type_desc in ('SQL_LOGIN','WINDOWS_LOGIN') order by name");
-        while (rs.next()){
-           String userName = rs.getString(1);
-           LoginType loginType = LoginType.values()[rs.getInt(2)];
-           loginMap.put(userName, loginType); 
+        logger.info("Getting server principal list")
+
+        def sqlServerPrincipals = [:]
+        statement = connection.createStatement()
+        def sqlQuery  = """SELECT name, 
+                                  CASE WHEN type_desc = 'SQL_LOGIN' THEN 0 ELSE 1 END,
+                                  is_disabled
+                           FROM sys.server_principals 
+                           WHERE type_desc IN ('SQL_LOGIN','WINDOWS_LOGIN') 
+                           ORDER BY name"""
+        
+        rs = statement.executeQuery(sqlQuery)
+        while (rs.next()) {
+           String userName = rs.getString(1)
+           PrincipalType principalType = PrincipalType.values()[rs.getInt(2)]
+           Boolean disabled = new Boolean(1 == rs.getInt(3))
+           sqlServerPrincipals.put(userName, ["principalType":principalType, "disabled":disabled])
         }
-        statement.close();
-        rs.close();
+        rs.close()
+        statement.close()
     
         // log record count
-        int count = getLogCount(connection);
+        int count = getLogCount(connection)
         // load all logs
-        Statement statement = null;
-        ResultSet rs = null;
-        Date since = null;
+        Statement statement = null
+        ResultSet rs = null
+        Date since = null
         for (int i=0; i<=count; ++i){
-            statement = connection.createStatement();
-            rs = statement.executeQuery("exec sp_readerrorlog ${i},1,'login'");
+            logger.debug("Parsing file ${i} of ${count+1}")
+            statement = connection.createStatement()
+            if (!statement.execute("{call sp_readerrorlog ${i},1,'login'}")){
+                logger.warn("Stored procedure did not return a result set for file ${i}");
+                statement.close();
+                continue;
+            }
+            rs = statement.getResultSet();
             while (rs.next()){
-                if ("Logon".equals(rs.getString(2))){
-                    String msg = rs.getString(3);
-                    Matcher matcher = PATTERN.matcher(msg.trim());
-                    if (!matcher.matches()){
-                        logger.warn("Unparsed data: '{}'", StringEscapeUtils.escapeHtml(msg));
-                        continue;
+                if ("Logon".equals(rs.getString(2))) {
+                    String msg = rs.getString(3)
+                    Matcher matcher = PATTERN.matcher(msg.trim())
+                    if (!matcher.matches()) {
+                        logger.warn("Unexpected format of login message: '{}'", StringEscapeUtils.escapeHtml(msg))
+                        continue
                     }
-                    boolean success = "succeeded".equals(matcher.group(1));
-                    String user = matcher.group(2);
-                    String ip = matcher.group(3);
-                    Date date = rs.getTimestamp(1);
+                    boolean success = "succeeded".equals(matcher.group(1))
+                    String user = matcher.group(2)
+                    String ip = matcher.group(3)
+                    Date logRecordTime = rs.getTimestamp(1)
                     
-                    UserInfo info = userMap.get(user);
-                    if (info == null){
-                        info = new UserInfo();
-                        info.server = serverName;
-                        if (!loginMap.containsKey(user)){
-                            info.principal = Principal.NOT_IN_LIST;
+                    def principalTypeFromLog = PrincipalType.UNKNOWN
+                    MESSAGE_TO_TYPES.each { pattern, type ->
+                        if (msg.contains(pattern)) {
+                            principalTypeFromLog = type
+                            return
                         }
-                        userMap.put(user,info);
                     }
-                    
-                    LogRecord rec = info.ipMap.get(ip);
-                    if (rec == null){
-                        rec = new LogRecord();
-                        if (info.principal == Principal.NOT_IN_LIST){
-                           rec.loginType = msg.contains("Windows authentication")? LoginType.WINDOWS_LOGIN : LoginType.SQL_LOGIN;
+                    UserInfo userInfo = userMap.get(user)
+                    if (userInfo == null) {
+                        userInfo = new UserInfo()
+                        userInfo.server = serverName
+                        if (!sqlServerPrincipals.containsKey(user)) {
+                            userInfo.logStatus = PrincipalLogStatus.NOT_ON_SERVER
                         } else {
-                           rec.loginType = loginMap.get(user);
+                            userInfo.principalDisabled = sqlServerPrincipals.get(user)["disabled"]
                         }
-                        info.ipMap.put(ip, rec);
+                        userMap.put(user, userInfo)
                     }
                     
-                    if (success){
-                        rec.lastSuccessDate = getLastDate(rec.lastSuccessDate,date);
-                        rec.successCount++;
-                    } else {
-                        rec.lastFailedDate = getLastDate(rec.lastFailedDate,date);
-                        rec.failedCount++;
+                    if (principalTypeFromLog==PrincipalType.UNKNOWN && sqlServerPrincipals.containsKey(user)) {
+                        principalTypeFromLog = sqlServerPrincipals.get(user)["principalType"]
                     }
-                    since = getFirstDate(since, date);
+                    
+                    LogRecord rec = userInfo.ipMap.get(ip+principalTypeFromLog)
+                    if (rec == null) {
+                        rec = new LogRecord()
+                        rec.sourceIP = ip
+                        rec.principalType = principalTypeFromLog
+                        userInfo.ipMap.put(ip+principalTypeFromLog, rec)
+                    }
+                    
+                    if (success) {
+                        rec.lastSuccessDate = getMaxDate(rec.lastSuccessDate,logRecordTime)
+                        rec.successCount++
+                    } else {
+                        rec.lastFailedDate = getMaxDate(rec.lastFailedDate, logRecordTime)
+                        rec.failedCount++
+                    }
+                    since = getMinDate(since, logRecordTime)
                 }
             }
-            statement.close();
-            rs.close(); 
-        }
-        loginMap.keySet().removeAll(userMap.keySet());
-    
-        for (Map.Entry<String,LoginType> e:loginMap.entrySet()){
-           UserInfo info = new UserInfo();
-           info.server = serverName;
-           info.principal = Principal.NOT_IN_LOG;
-           LogRecord rec = new LogRecord();
-           rec.loginType = e.getValue();
-           info.ipMap.put(null, rec);
-           userMap.put(e.getKey(),info);
+            rs.close()
+            statement.close()
         }
     
-        connection.commit();
+        // Add principals that were not found at sql server
+        sqlServerPrincipals.keySet().removeAll(userMap.keySet())
+        for (Map.Entry<String,PrincipalType> e: sqlServerPrincipals.entrySet()) {
+           UserInfo userInfo = new UserInfo()
+           userInfo.server = serverName
+           userInfo.logStatus = PrincipalLogStatus.NOT_IN_LOG
+           userInfo.principalDisabled = e.getValue()["disabled"]
+           LogRecord rec = new LogRecord()
+           rec.principalType = e.getValue()["principalType"]
+           userInfo.ipMap.put(null, rec)
+           userMap.put(e.getKey(), userInfo)
+        }
+    
+        connection.close()
         
-        List<Map.Entry<String,UserInfo>> elist = new ArrayList<Map.Entry<String,UserInfo>>(userMap.entrySet()).sort{
-            a, b -> a.key.compareToIgnoreCase(b.key)
-        }
-        for (Map.Entry<String,UserInfo> e:elist){
-            UserInfo i = e.getValue();
-            for (Map.Entry<String,LogRecord> e2:i.ipMap.entrySet()){
-                LogRecord r = e2.getValue();
+        List<Map.Entry<String,UserInfo>> elist = new ArrayList<Map.Entry<String,UserInfo>>(userMap.entrySet())
+        elist.sort { a, b -> a.key.compareToIgnoreCase(b.key) }
+        
+        elist.each { entry ->
+            def principalName = entry.getKey()
+            def userInfo = entry.getValue()
+            userInfo.ipMap.values().each { logRecord ->
                 
-                println "<tr>"
-                println "<td>${i.server}</td>"
-                println "<td>${e.getKey()}</td>"
-                println "<td>${getNotNull(r.loginType)}</td>"
-                println "<td>${getNotNull(i.principal)}</td>"
-                println "<td>${StringEscapeUtils.escapeHtml(getNotNull(e2.getKey()))}</td>"
-                if (p_resolve_hosts){
-                    String ip = e2.getKey();
+                println """<tr>
+                             <td>${userInfo.server}</td>
+                             <td>${principalName}</td>
+                             <td>${userInfo.principalDisabled ==null ? "Unknown" : (userInfo.principalDisabled ? "Disabled" : "Enabled")}</td>
+                             <td>${getNotNull(logRecord.principalType)}</td>
+                             <td>${StringEscapeUtils.escapeHtml(getNotNull(logRecord.sourceIP))}</td>"""
+
+                if (p_resolve_hosts) {
+                    String ip = logRecord.sourceIP
                     println "<td>"
-                    if (ip != null){
-                        try{
-                            print InetAddress.getByName(ip).getCanonicalHostName();
-                        } catch (UnknownHostException uhe){
-                            print StringEscapeUtils.escapeHtml(ip);
-                        } 
+                    if (ip != null) {
+                        try {
+                            print InetAddress.getByName(ip).getCanonicalHostName()
+                        } catch (UnknownHostException uhe) {
+                            print StringEscapeUtils.escapeHtml(ip)
+                        }
                     }
                     println "</td>"
                 }
-                println "<td>${getNotNull(r.lastSuccessDate)}</td>"
-                println "<td>${getNotNull(r.lastFailedDate)}</td>"
-                println "<td style='text-align:right'>${r.successCount}</td>"
-                println "<td style='text-align:right'>${r.failedCount}</td>"
+                println "<td style='text-align:right'>${logRecord.successCount}</td>"
+                println "<td>${getNotNull(logRecord.lastSuccessDate)}</td>"
+                println "<td style='text-align:right'>${logRecord.failedCount}</td>"
+                println "<td>${getNotNull(logRecord.lastFailedDate)}</td>"
+                println "<td>${getNotNull(userInfo.logStatus)}</td>"
                 println "<td>${getNotNull(since)}</td>"
                 println "</tr>"
             }
         }
     } catch (Exception e) {
         def msg = "Error occurred "+e.getMessage()
-        org.slf4j.LoggerFactory.getLogger(this.getClass()).error(msg,e);
+        org.slf4j.LoggerFactory.getLogger(this.getClass()).error(msg,e)
         logger.error(msg, e)
     }
 }
-println "</table>"    
+println "</table>"
