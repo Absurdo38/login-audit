@@ -143,7 +143,7 @@ public abstract class SqlServerLoginAudit{
                     logger.debug("Parsing file ${i+1} of ${count+1}")
                     statement = connection.createStatement()
                     if (!statement.execute("{call sp_readerrorlog ${i},1,'login'}")){
-                        logger.warn("Stored procedure did not return a result set for file ${i}");
+                        logger.warn("Stored procedure did not return a result set for file ${i+1}");
                         statement.close();
                         continue;
                     }
