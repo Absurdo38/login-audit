@@ -162,8 +162,8 @@ dbConnections.each{ connectionInfo ->
         ResultSet rs = null
         Date since = null
         for (int i=0; i<=count; ++i){
-            statement = connection.createStatement()
             logger.debug("Parsing file ${i+1} of ${count+1}")
+            statement = connection.createStatement()
             if (!statement.execute("{call sp_readerrorlog ${i},1,'login'}")){
                 logger.warn("Stored procedure did not return a result set for file ${i}");
                 statement.close();
