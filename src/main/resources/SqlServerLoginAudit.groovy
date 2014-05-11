@@ -240,11 +240,12 @@ public abstract class SqlServerLoginAudit{
                             String ip = logRecord.sourceIP
                             if (ip != null) {
                                 try {
-                                    row[index++] = InetAddress.getByName(ip).getCanonicalHostName()
+                                    row[index] = InetAddress.getByName(ip).getCanonicalHostName()
                                 } catch (UnknownHostException uhe) {
-                                    row[index++] = ip;
+                                    row[index] = ip;
                                 }
                             }
+                            index++;
                         }
                         
                         row[index++] = logRecord.successCount;
