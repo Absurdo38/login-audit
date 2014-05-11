@@ -10,4 +10,19 @@
 
         <output  script="sqlserver-login-audit.groovy" type="html" />
     </tool>
+    
+    <tool id="sqlserver-login-audit-tracking" title="Login audit tracking" projectTypes="inventory">
+        <description>A DBMaster plugin that parses native sql server logs to get aggregated login statistics</description>
+
+        <parameters>
+            <parameter name="p_servers"   title="Servers"   type="string" required="false" multiple="true"
+                       suggestion="project_connections" width="300" />
+            <parameter name="p_resolve_hosts" title="Resolve hosts" type="boolean" required="true" defaultValue="false" /> 
+            <parameter name="p_tracking_file"        title="Path to Excel file"   type="string" required="true" />
+            <parameter name="p_email"                title="Email"   type="string" required="false" />
+            <parameter name="p_backup"               title="Backup"   type="boolean" required="true" defaultValue="false" />
+        </parameters>
+
+        <output  script="sqlserver-login-audit-tracking.groovy" type="html" />
+    </tool>
 </tools>
