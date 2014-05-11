@@ -162,20 +162,14 @@ dbConnections.each{ connectionInfo ->
         ResultSet rs = null
         Date since = null
         for (int i=0; i<=count; ++i){
-<<<<<<< HEAD
             statement = connection.createStatement()
-            logger.debug("Parsing file ${i} of ${count+1}")
-            rs = statement.executeQuery("exec sp_readerrorlog ${i},1,'login'")
-=======
-            logger.debug("Parsing file ${i} of ${count+1}")
-            statement = connection.createStatement()
+            logger.debug("Parsing file ${i+1} of ${count+1}")
             if (!statement.execute("{call sp_readerrorlog ${i},1,'login'}")){
                 logger.warn("Stored procedure did not return a result set for file ${i}");
                 statement.close();
                 continue;
             }
             rs = statement.getResultSet();
->>>>>>> 2ee4240bfcce8d2a175604ed0a66dab09de5f7d5
             while (rs.next()){
                 if ("Logon".equals(rs.getString(2))) {
                     String msg = rs.getString(3)
@@ -206,7 +200,6 @@ dbConnections.each{ connectionInfo ->
                             userInfo.principalDisabled = sqlServerPrincipals.get(user)["disabled"]
                         }
                         userMap.put(user, userInfo)
-<<<<<<< HEAD
                     }
                     
                     if (principalTypeFromLog==PrincipalType.UNKNOWN && sqlServerPrincipals.containsKey(user)) {
@@ -221,22 +214,6 @@ dbConnections.each{ connectionInfo ->
                         userInfo.ipMap.put(ip+principalTypeFromLog, rec)
                     }
                     
-=======
-                    }
-                    
-                    if (principalTypeFromLog==PrincipalType.UNKNOWN && sqlServerPrincipals.containsKey(user)) {
-                        principalTypeFromLog = sqlServerPrincipals.get(user)["principalType"]
-                    }
-                    
-                    LogRecord rec = userInfo.ipMap.get(ip+principalTypeFromLog)
-                    if (rec == null) {
-                        rec = new LogRecord()
-                        rec.sourceIP = ip
-                        rec.principalType = principalTypeFromLog
-                        userInfo.ipMap.put(ip+principalTypeFromLog, rec)
-                    }
-                    
->>>>>>> 2ee4240bfcce8d2a175604ed0a66dab09de5f7d5
                     if (success) {
                         rec.lastSuccessDate = getMaxDate(rec.lastSuccessDate,logRecordTime)
                         rec.successCount++
