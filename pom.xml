@@ -5,8 +5,8 @@
 
     <artifactId>sqlserver-login-audit</artifactId>
 
-    <name>User audit</name>
-    <description>Parses native sql server logs to get aggregated logon statistics</description>
+    <name>Login audit</name>
+    <description>Parses native sql server logs to get aggregated login statistics</description>
 
     <version>0.5.0</version>
     <packaging>bundle</packaging>

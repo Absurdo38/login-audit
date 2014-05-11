@@ -1,6 +1,6 @@
 <tools>
     <tool id="sqlserver-login-audit" title="Login audit" projectTypes="inventory">
-        <description>A DBMaster plugin that parses native sql server logs to get aggregated logon statistics</description>
+        <description>A DBMaster plugin that parses native sql server logs to get aggregated login statistics</description>
 
         <parameters>
             <parameter name="p_servers"   title="Servers"   type="string" required="false" multiple="true"
