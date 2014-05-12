@@ -26,7 +26,7 @@ import org.apache.commons.lang.StringEscapeUtils;
 public abstract class SqlServerLoginAudit{ 
     enum PrincipalLogStatus { NOT_ON_SERVER, NOT_IN_LOG, ACTIVE }
     
-    enum PrincipalType { SQL_LOGIN, WINDOWS_LOGIN, UNKNOWN }
+    enum PrincipalType { SQL_LOGIN, WINDOWS_LOGIN, WINDOWS_GROUP, UNKNOWN }
     
     static MESSAGE_TO_TYPES = [ "Windows authentication"   : PrincipalType.WINDOWS_LOGIN,
                                "Connection: trusted"       : PrincipalType.WINDOWS_LOGIN,
@@ -122,7 +122,7 @@ public abstract class SqlServerLoginAudit{
                                           CASE WHEN type_desc = 'SQL_LOGIN' THEN 0 ELSE 1 END,
                                           is_disabled
                                    FROM sys.server_principals 
-                                   WHERE type_desc IN ('SQL_LOGIN','WINDOWS_LOGIN') 
+                                   WHERE type_desc IN ('SQL_LOGIN','WINDOWS_LOGIN','WINDOWS_GROUP') 
                                    ORDER BY name"""
                 
                 ResultSet rs = statement.executeQuery(sqlQuery)

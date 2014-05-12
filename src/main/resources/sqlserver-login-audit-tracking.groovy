@@ -12,7 +12,20 @@ def getNotNull(Object o) {
 }
 
 
-List<String> columns = ["Server","Principal","Principal Status","Type","Source","Successful Logins","Last Success Time","Failed Logins","Last Failed Time","Principal Log Status","Log Records Since","Status"];
+List<String> columns = [
+    "Server",
+    "Principal",
+    "Principal Status",
+    "Type",
+    "Source",
+    "Successful Logins",
+    "Last Success Time",
+    "Failed Logins",
+    "Last Failed Time",
+    "Principal Log Status",
+    "Log Records Since",
+    "Status" ];
+    
 if (p_resolve_hosts) {
    columns.add(5,"Host");
 }
@@ -49,7 +62,7 @@ println "<td>Principal Log Status</td>"
 println "<td>Log Records Since</td>"
 println "</tr>"
 
-List<Object[]> list = SqlServerLoginAudit.getLoginAuditList(dbm,logger, p_servers, p_resolve_hosts);
+List<Object[]> list = SqlServerLoginAudit.getLoginAuditList(dbm, logger, p_servers, p_resolve_hosts);
 for (Object[] v: list){
     println "<tr>"
     println "<td>${v[0]}</td>"
@@ -59,7 +72,7 @@ for (Object[] v: list){
     println "<td>${StringEscapeUtils.escapeHtml(getNotNull(v[4]))}</td>"
     int index = 5;
     if (p_resolve_hosts) {
-        println " <td>${StringEscapeUtils.escapeHtml(v[index++])}</td>"
+        println " <td>${StringEscapeUtils.escapeHtml(v[index++] ?: "")}</td>"
     }
     println "<td style='text-align:right'>${v[index++]}</td>"
     println "<td>${getNotNull(v[index++])}</td>"
