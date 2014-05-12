@@ -232,7 +232,7 @@ public abstract class SqlServerLoginAudit{
                         int index = 0;
                         row[index++] = userInfo.server;
                         row[index++] = principalName;
-                        row[index++] = userInfo.principalDisabled;
+                        row[index++] = userInfo.principalDisabled == null ? "Unknown" : (userInfo.principalDisabled ? "Disabled" : "Enabled");
                         row[index++] = logRecord.principalType;
                         row[index++] = logRecord.sourceIP;
                         

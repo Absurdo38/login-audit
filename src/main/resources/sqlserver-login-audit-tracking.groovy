@@ -67,7 +67,7 @@ for (Object[] v: list){
     println "<tr>"
     println "<td>${v[0]}</td>"
     println "<td>${v[1]}</td>"
-    println """<td>${v[2] == null ? "Unknown" : (v[2] ? "Disabled" : "Enabled")}</td>"""
+    println "<td>${v[2]}</td>"
     println "<td>${getNotNull(v[3])}</td>"
     println "<td>${StringEscapeUtils.escapeHtml(getNotNull(v[4]))}</td>"
     int index = 5;
