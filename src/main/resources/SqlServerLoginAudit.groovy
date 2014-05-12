@@ -119,7 +119,7 @@ public abstract class SqlServerLoginAudit{
                 def sqlServerPrincipals = [:]
                 Statement statement = connection.createStatement()
                 def sqlQuery  = """SELECT name, 
-                                          CASE WHEN type_desc = 'SQL_LOGIN' THEN 0 ELSE 1 END,
+                                          type_desc,
                                           is_disabled
                                    FROM sys.server_principals 
                                    WHERE type_desc IN ('SQL_LOGIN','WINDOWS_LOGIN','WINDOWS_GROUP') 
@@ -128,7 +128,7 @@ public abstract class SqlServerLoginAudit{
                 ResultSet rs = statement.executeQuery(sqlQuery)
                 while (rs.next()) {
                    String userName = rs.getString(1)
-                   PrincipalType principalType = PrincipalType.values()[rs.getInt(2)]
+                   PrincipalType principalType = PrincipalType.valueOf(rs.getString(2))
                    Boolean disabled = new Boolean(1 == rs.getInt(3))
                    sqlServerPrincipals.put(userName, ["principalType":principalType, "disabled":disabled])
                 }
