@@ -22,11 +22,10 @@ import com.branegy.dbmaster.connection.JdbcConnector
 
 import org.apache.commons.lang.StringEscapeUtils;
 
+import io.dbmaster.tools.login.audit.*;
+import java.util.concurrent.CancellationException;
 
 public abstract class SqlServerLoginAudit{ 
-    enum PrincipalLogStatus { NOT_ON_SERVER, NOT_IN_LOG, ACTIVE }
-    
-    enum PrincipalType { SQL_LOGIN, WINDOWS_LOGIN, WINDOWS_GROUP, UNKNOWN }
     
     static MESSAGE_TO_TYPES = [ "Windows authentication"   : PrincipalType.WINDOWS_LOGIN,
                                "Connection: trusted"       : PrincipalType.WINDOWS_LOGIN,
@@ -140,6 +139,10 @@ public abstract class SqlServerLoginAudit{
                 // load all logs
                 Date since = null
                 for (int i=0; i<=count; ++i){
+                    if (Thread.interrupted()){
+                        throw new CancellationException();
+                    }
+                    
                     logger.debug("Parsing file ${i+1} of ${count+1}")
                     statement = connection.createStatement()
                     if (!statement.execute("{call sp_readerrorlog ${i},1,'login'}")){
@@ -258,6 +261,8 @@ public abstract class SqlServerLoginAudit{
                         result.add(row);
                     }
                 }
+            } catch (CancellationException e){
+                throw e;
             } catch (Exception e) {
                 def msg = "Error occurred "+e.getMessage()
                 org.slf4j.LoggerFactory.getLogger(this.getClass()).error(msg,e)

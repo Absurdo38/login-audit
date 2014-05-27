@@ -28,8 +28,8 @@ println "<td>Principal Log Status</td>"
 println "<td>Log Records Since</td>"
 println "</tr>"
 
-List<Object[]> list = SqlServerLoginAudit.getLoginAuditList(dbm,logger, p_servers, p_resolve_hosts);
-for (Object[] v: list){
+result = SqlServerLoginAudit.getLoginAuditList(dbm,logger, p_servers, p_resolve_hosts);
+for (Object[] v: result) {
     println "<tr>"
     println "<td>${v[0]}</td>"
     println "<td>${v[1]}</td>"
