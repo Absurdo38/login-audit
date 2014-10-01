@@ -32,7 +32,11 @@ result = SqlServerLoginAudit.getLoginAuditList(dbm,logger, p_servers, p_resolve_
 for (Object[] v: result) {
     println "<tr>"
     println "<td>${v[0]}</td>"
-    println "<td>${v[1]}</td>"
+    
+    print "<td>"
+    print tool_linker.set("id","ldap-user-group").set("p_query","(sAMAccountName="+v[1].substring(v[1].indexOf('\\')+1)+")").render(v[1]).toString()
+    println "</td>"   
+    
     println "<td>${v[2]}</td>"
     println "<td>${getNotNull(v[3])}</td>"
     println "<td>${StringEscapeUtils.escapeHtml(getNotNull(v[4]))}</td>"

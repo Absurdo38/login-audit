@@ -25,4 +25,16 @@
 
         <output  script="sqlserver-login-audit-tracking.groovy" type="html" />
     </tool>
+    
+    <tool id="ldap-user-group" title="User group" projectTypes="inventory">
+        <description></description>
+
+        <parameters>
+            <parameter name="p_connection" title="LDAP Connection"  type="string" required="true" defaultValue="ActiveDirectory" />
+            <parameter name="p_base_context" title="Base Context"  type="string" required="true" defaultValue="OU=MGI,DC=MOVADOGROUP,DC=com" />
+            <parameter name="p_query" title="User or group"  type="string" required="true" />
+        </parameters>
+
+        <output  script="ldap-user-group.groovy" type="html" />
+    </tool>
 </tools>

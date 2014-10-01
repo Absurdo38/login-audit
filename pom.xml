@@ -8,7 +8,7 @@
     <name>Login audit</name>
     <description>Parses native sql server logs to get aggregated login statistics</description>
 
-    <version>0.5.3</version>
+    <version>0.5.17</version>
     <packaging>bundle</packaging>
 
     <parent>
