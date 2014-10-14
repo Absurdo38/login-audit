@@ -6,6 +6,14 @@
             <parameter name="p_servers"   title="Servers"   type="string" required="false" multiple="true"
                        suggestion="project_connections" width="300" />
             <parameter name="p_resolve_hosts" title="Resolve hosts" type="boolean" required="true" defaultValue="false" />            
+
+            <parameter name="p_storage_db"      title="Storage Database" type="string" required="false" 
+                       suggestion="project_databases" width="300" />
+
+            <parameter name="p_ldap_connection" title="LDAP Connection"    type="string" required="false"
+                        width="300" />
+            <parameter name="p_ldap_context"    title="LDAP Base Context"  type="string" required="false" 
+                        width="600" />
         </parameters>
 
         <output  script="sqlserver-login-audit.groovy" type="html" />
@@ -26,15 +34,18 @@
         <output  script="sqlserver-login-audit-tracking.groovy" type="html" />
     </tool>
     
-    <tool id="ldap-user-group" title="User group" projectTypes="inventory">
-        <description></description>
+    <tool id="db-principal-info" title="SQL Principal Info" projectTypes="inventory">
+        <description>Displays information about sql server principal</description>
 
         <parameters>
-            <parameter name="p_connection" title="LDAP Connection"  type="string" required="true" defaultValue="ActiveDirectory" />
-            <parameter name="p_base_context" title="Base Context"  type="string" required="true" defaultValue="OU=MGI,DC=MOVADOGROUP,DC=com" />
-            <parameter name="p_query" title="User or group"  type="string" required="true" />
+            <parameter name="p_server"   title="Server"   type="string" required="false" multiple="false"
+                       suggestion="project_connections" width="300" />
+
+            <parameter name="p_principal" title="User or group"    type="string" required="true" />            
+            <parameter name="p_ldap_connection" title="LDAP Connection" type="string" required="true" />
+            <parameter name="p_ldap_context" title="LDAP Base Context"  type="string" required="true"  />
         </parameters>
 
-        <output  script="ldap-user-group.groovy" type="html" />
+        <output  script="principal-info.groovy" type="html" />
     </tool>
 </tools>
