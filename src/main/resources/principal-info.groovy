@@ -12,134 +12,13 @@ import org.slf4j.Logger
 import org.apache.commons.lang.StringUtils
 import groovy.sql.Sql
 
-
-// import com.branegy.dbmaster.util.NameMap
-
-
-
 connectionSrv = dbm.getService(ConnectionService.class)
-connectionInfo = connectionSrv.findByName(p_ldap_connection)
-connector = ConnectionProvider.getConnector(connectionInfo)
-
-// TODO Check if connector is ldap
-def context = connector.connect().getContext()
-dbm.closeResourceOnExit(context)
-
-def String escapeDN(String name) {
-    /*StringBuilder sb = new StringBuilder();
-    if ((name.length() > 0) && ((name.charAt(0) == ' ') || (name.charAt(0) == '#'))) {
-        sb.append('\\'); // add the leading backslash if needed
-    }
-    for (int i = 0; i < name.length(); i++) {
-        char curChar = name.charAt(i);
-        switch (curChar) {
-            case '\\':
-                sb.append("\\\\");
-                break;
-            case ',':
-                sb.append("\\,");
-                break;
-            case '+':
-                sb.append("\\+");
-                break;
-            case '"':
-                sb.append("\\\"");
-                break;
-            case '<':
-                sb.append("\\<");
-                break;
-            case '>':
-                sb.append("\\>");
-                break;
-            case ';':
-                sb.append("\\;");
-                break;
-            default:
-                sb.append(curChar);
-        }
-    }
-    if ((name.length() > 1) && (name.charAt(name.length() - 1) == ' ')) {
-        sb.insert(sb.length() - 1, '\\'); // add the trailing backslash if needed
-        }
-    return sb.toString();*/
-    return name.replace("\\", "\\\\");
-}
-
-def getDistinguishedName(Attributes attrs){
-    return attrs.get("distinguishedName").getAll().next().toString();
-}
-
-def getValue(Attributes attrs,String name){
-    return "<span style=\"color:#d3d3d3;\">"+name+":</span> "+attrs.get(name).getAll().next().toString();
-}
-
-def search(Deque<Attributes> stack, String groupName, DirContext context, 
-           SearchControls ctrl, Logger logger, int level) {
-
-    if (contains(stack, groupName)) {
-        return;
-    }
-    
-    NamingEnumeration enumeration = context.
-        search(p_ldap_context, String.format("(distinguishedName=%s)",escapeDN(groupName)), ctrl);
-
-    if (!enumeration.hasMore()) {
-        return; 
-    }
-    
-    Attributes attribs = ((SearchResult) enumeration.next()).getAttributes();
-    Attribute attr = attribs.get("objectClass")
-    if (!attr.contains("group")){
-        return;
-    }
-    
-    logger.info(escapeDN(groupName));
-    println  StringUtils.repeat("&nbsp;&nbsp;", level*2)+getValue(attribs,"name")
-            +" " + getValue(attribs,"sAMAccountName")+"<br/>";
-    
-    attr = attribs.get("member")
-    NamingEnumeration<Attribute> e = attr.getAll();
-    if (e.hasMore()){
-        while (e.hasMore()){
-            groupName = e.next();
-            stack.addLast(attribs);
-            search(stack, groupName, context, ctrl, logger, level+1);
-            stack.removeLast();
-        };
-    //} else {
-    //    println stack.toString()+"<br/>";
-    }
-}
-
-def contains(Collection<Attributes> collection, String name) {
-    for (Attributes a:collection) {
-        if (getDistinguishedName(a).equals(name)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-
-SearchControls ctrl = new SearchControls();
-// a candidate for script parameter
-ctrl.setSearchScope(SearchControls.SUBTREE_SCOPE);
-// a candidate for script parameter
-ctrl.setCountLimit(100000);
-// a candidate for script parameter
-ctrl.setTimeLimit(10000); // 10 second == 10000 ms
-
-/*if (p_attributes!=null && p_attributes.length()>0) {
-    def attrIDs = p_attributes.split(";")
-    ctrl.setReturningAttributes(attrIDs);
-}*/
-//println "<table border=\"1\">"
-
 
 def connectionSrv = dbm.getService(ConnectionService.class)
 Sql sql = null       
-logger.info("Connecting to ${p_server}")
+logger.info("Connecting to database server ${p_server}")
 def connector = ConnectionProvider.getConnector(connectionSrv.findByName(p_server))
+
 if (!(connector instanceof JdbcConnector)) {
     // TODO: have to be an error
     logger.info("Connection is not a database one")
@@ -194,12 +73,15 @@ def query = """
         return charvalue
     }
 
-
+    logger.info("Getting principal info")
     def row = sql.firstRow(query, [ p_principal ])
+    def principal_id
+    
     if (row == null) {
             println "Principal ${p_principal} not found at server ${p_server}";
-    } else { 
-        println """ <h1>Principal ${p_principal} info at server ${p_server}</h1>
+    } else {
+        principal_id = row.principal_id
+        println """ <h2>Principal ${p_principal} info at server ${p_server}</h2>
                     <table>
                         <tr><td>Name</td><td>${row.name}</td></tr>
                         <tr><td>Type</td><td>${row.type_desc}</td></tr>
@@ -223,63 +105,39 @@ def query = """
                 """
     }
     
+query = """
+            WITH role_members AS (
+                SELECT rp.name root_role, rm.role_principal_id, rp.name, rm.member_principal_id,mp.name as member_name, mp.sid, 1 as depth  
+                FROM sys.server_role_members rm
+                INNER JOIN sys.server_principals rp on rp.principal_id = rm.role_principal_id
+                INNER JOIN sys.server_principals mp on mp.principal_id = rm.member_principal_id
 
+                UNION ALL
 
-Deque<Attributes> stack = new ArrayDeque<Attributes>();
+                SELECT cte.root_role, cte.member_principal_id, cte.member_name, rm.member_principal_id,mp.name as member_name, mp.sid, cte.depth +1
+                FROM sys.server_role_members rm
+                INNER JOIN sys.server_principals mp on mp.principal_id = rm.member_principal_id
+                INNER JOIN role_members cte on cte.member_principal_id = rm.role_principal_id
+            )
+            SELECT DISTINCT root_role FROM role_members WHERE member_principal_id=?
+        """
 
-def idx = p_principal.indexOf('\\');
-def ldap_query = "(sAMAccountName=${idx>0 ? p_principal.substring(idx+1) : p_principal})"
+logger.info("Getting server roles")
+        
+def rows  = sql.rows(query, [principal_id] )
 
-logger.debug("Query = ${ldap_query}")
-
-NamingEnumeration enumeration = context.search(p_ldap_context, ldap_query, ctrl)
-int index = 0
-try {
-    while (enumeration.hasMore()) {
-        SearchResult result = (SearchResult) enumeration.next();
-        Attributes attribs = result.getAttributes();
-        Attribute attr =  attribs.get("objectClass")
-        if (attr.contains("user")) {
-           attr = attribs.get("memberOf");
-           if (attr != null){
-               NamingEnumeration<Attribute> e = attr.getAll(); // group name
-               while (e.hasMore()){
-                  String groupName = e.next();
-                  search(stack, groupName, context, ctrl, logger,0);
-               }
-           }
-        }
-    }
-}  catch (SizeLimitExceededException e) {
-    // for paging see
-    // http://www.forumeasy.com/forums/thread.jsp?tid=115756126876&fid=ldapprof2&highlight=LDAP+Search+Paged+Results+Control
+println "<h2>Server roles</h2>"
+if (rows.size()==0) { 
+    println "<div>No server roles defined</div>" 
+} else {
+    println "<div>${rows.collect { it.root_role }.join(",")}</div>" 
 }
 
-/*
+logger.info("Getting database roles")
 
-WITH role_members AS (
-
-SELECT rp.name root_role, rm.role_principal_id, rp.name, rm.member_principal_id,mp.name as member_name, mp.sid, 1 as depth  
-FROM sys.server_role_members rm
- inner join sys.server_principals rp on rp.principal_id = rm.role_principal_id
- inner join sys.server_principals mp on mp.principal_id = rm.member_principal_id
-
-UNION ALL
-
-SELECT cte.root_role, cte.member_principal_id, cte.member_name, rm.member_principal_id,mp.name as member_name, mp.sid, cte.depth +1
-FROM sys.server_role_members rm
- inner join sys.server_principals mp on mp.principal_id = rm.member_principal_id
- inner join role_members cte on cte.member_principal_id = rm.role_principal_id
-)
-SELECT distinct root_role from role_members where member_name='WRR\dipesh'
-
-
-
----------------------------------
-
-create table #tempschema (database_name sysname,role_name sysname,principal_name sysname)
+sql.execute("create table #tempschema (database_name sysname,role_name sysname,principal_name sysname)")
  
-INSERT INTO #tempschema
+sql.execute("""INSERT INTO #tempschema
 EXEC sp_MSForEachDB '
 USE [?];
 WITH role_members AS (
@@ -296,13 +154,92 @@ FROM sys.database_role_members rm
  inner join sys.database_principals mp on mp.principal_id = rm.member_principal_id
  inner join role_members cte on cte.member_principal_id = rm.role_principal_id
 )
-SELECT distinct ''?'',root_role, sp.name from role_members rm
-inner join sys.server_principals sp on rm.sid= sp.sid 
-where sp.name = ''WRR\crystal''
-'
+SELECT distinct ''?'' as database_name,root_role as role_name, sp.name from role_members rm
+inner join sys.server_principals sp on rm.sid=sp.sid 
+where sp.principal_id = ${principal_id}'""".toString())
 
-select distinct * from #tempschema
-drop table #tempschema
+rows  = sql.rows("select distinct * from #tempschema")
+
+sql.execute("drop table #tempschema")
+
+println "<h2>Database roles</h2>"
+logger.debug(query)
+// rows  = sql.rows(query.toString())
+
+if (rows.size()==0) { 
+    println "<div>No database roles defined</div>" 
+} else {
+    println "<table>"
+    rows.each { r -> 
+        println "<tr><td>${r.database_name}</td><td>${r.role_name}</td></tr>"
+    }
+    println "</table>"
+}
+
+    def printAttr(String attribute, String value) {
+        return "<span style=\"color:#d3d3d3;\">"+attribute+":</span> "+value;
+    }
+
+    def printSubGroups (loginAudit, account, level) {
+        if (account.member_of==null) {
+            return
+        }
+        
+        account.member_of.each { member_of_dn ->
+            def group = loginAudit.ldapAccountByDN[member_of_dn]
+            if (group == null) {
+                logger.debug("Account for ${member_of_dn} does not exist")
+            } else {
+                println  StringUtils.repeat("&nbsp;&nbsp;", level*2) +
+                         printAttr("name", group.title)+" " + printAttr("sAMAccountName",group.name)+"<br/>";
+                def groupName = group.name
+                //if (!list.contains(groupName)) {
+                    //list.add(groupName)
+                    printSubGroups(loginAudit, group, level+1)
+                //}
+            }
+        }
+    }
+
+    def printMembers (loginAudit, account, level ) {
+        if (account.members==null) {
+            return
+        }
+
+        account.members.each { member_dn ->
+            def member = loginAudit.ldapAccountByDN[member_dn]
+            if (member == null) {
+                logger.debug("Account for ${member_of_dn} does not exist")
+            } else {
+                println  StringUtils.repeat("&nbsp;&nbsp;", level*2) +
+                         printAttr("name", member.title)+" " + printAttr("sAMAccountName",member.name)+"<br/>";
+                printMembers(loginAudit, member, level+1)
+            }
+        }
+    }
+
+    logger.info("Retrieving active directory information")
+    def loginAudit = new SqlServerLoginAudit(dbm,logger)
+    loginAudit.setupLdapAccounts(p_ldap_connection, p_ldap_context)
+   
+    def idx = p_principal.indexOf('\\')
+    def accountName = idx>0 ? p_principal.substring(idx+1) : p_principal
+    def account = loginAudit.ldapAccountByName[accountName]
+    if (account == null) {
+        logger.info("Account ${accountName} not found in active directory")
+    } else {
+        if (account.member_of!=null && account.member_of.size()>0) {
+            println "<h2>Active Directory: Group Membership for ${accountName}</h2>"
+            printSubGroups(loginAudit, account, 0)
+        }
+        if (account.members!=null && account.members.size()>0) {
+            println "<h2>Active Directory: Members of ${accountName}</h2>"
+            printMembers(loginAudit, account, 0)
+        }
+    }
+
+
+/*
 
 -------------------------------------------
 
@@ -389,46 +326,6 @@ SELECT CASE WHEN P.state_desc = 'GRANT_WITH_GRANT_OPTION' THEN 'GRANT' ELSE P.st
  --WHERE P.grantee_principal_id IN (USER_ID('TestUser1'), USER_ID('TestUser2'));
 
 where not DP.name like '%public%'
-
-
-
-
-SELECT
-log.name,
-log.type,
-log.type_desc,
-ISNULL(log.default_language_name,N'') AS [Language],
-l.alias AS [LanguageAlias],
-ISNULL(log.default_database_name, N'') AS [DefaultDatabase],
-CAST(CASE sp.state WHEN N'D' THEN 1 ELSE 0 END AS bit) AS [DenyWindowsLogin],
-CASE WHEN N'U' = log.type THEN 0 WHEN N'G' = log.type THEN 1 WHEN N'S' = log.type THEN 2 WHEN N'C' = log.type THEN 3 WHEN N'K' = log.type THEN 4 END AS [LoginType],
-CASE WHEN (N'U' != log.type AND N'G' != log.type) THEN 99 WHEN (sp.state is null) THEN 0 WHEN (N'G'=sp.state) THEN 1 ELSE 2 END AS [WindowsLoginAccessType],
-CAST(CASE WHEN (sp.state is null) THEN 0 ELSE 1 END AS bit) AS [HasAccess],
-log.sid AS [Sid],
-log.create_date AS [CreateDate],
-log.modify_date AS [DateLastModified],
-CAST(LOGINPROPERTY(log.name, N'IsLocked') AS bit) AS [IsLocked],
-CAST(LOGINPROPERTY(log.name, N'IsExpired') AS bit) AS [IsPasswordExpired],
-CAST(LOGINPROPERTY(log.name, N'IsMustChange') AS bit) AS [MustChangePassword],
-log.principal_id AS [ID],
-ISNULL(c.name,N'') AS [Credential],
-ISNULL(cert.name,N'') AS [Certificate],
-ISNULL(ak.name,N'') AS [AsymmetricKey],
-log.is_disabled AS [IsDisabled],
-CAST(CASE WHEN log.principal_id < 256 THEN 1 ELSE 0 END AS bit) AS [IsSystemObject],
-CAST(sqllog.is_expiration_checked AS bit) AS [PasswordExpirationEnabled],
-CAST(sqllog.is_policy_checked AS bit) AS [PasswordPolicyEnforced]
-FROM
-sys.server_principals AS log
-LEFT OUTER JOIN sys.syslanguages AS l ON l.name = log.default_language_name
-LEFT OUTER JOIN sys.server_permissions AS sp ON sp.grantee_principal_id = log.principal_id and sp.type = N'COSQ'
-LEFT OUTER JOIN sys.credentials AS c ON c.credential_id = log.credential_id
-LEFT OUTER JOIN master.sys.certificates AS cert ON cert.sid = log.sid
-LEFT OUTER JOIN master.sys.asymmetric_keys AS ak ON ak.sid = log.sid
-LEFT OUTER JOIN sys.sql_logins AS sqllog ON sqllog.principal_id = log.principal_id
-WHERE
-(log.type in ('U', 'G', 'S', 'C', 'K') AND log.principal_id not between 101 and 255 AND log.name <> N'##MS_AgentSigningCertificate##')and(log.name='Movadogroup\svdavichen')
-
 
 
 */

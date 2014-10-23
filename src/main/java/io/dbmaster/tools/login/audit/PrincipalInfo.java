@@ -2,7 +2,8 @@ package io.dbmaster.tools.login.audit;
 
 import java.sql.Timestamp;
 import java.util.Map;
-
+import java.util.Set;
+import java.util.HashSet;
 
 public class PrincipalInfo implements java.io.Serializable {
         int record_id;
@@ -22,4 +23,13 @@ public class PrincipalInfo implements java.io.Serializable {
         // PrincipalLogStatus logStatus = PrincipalLogStatus.ACTIVE
         // map of ip_address+principalType (we can find logins of different type at sql server and in log)        
         Map<String, LogRecord> statistics;
+        
+        Set<String> linked_accounts;
+        
+        public synchronized void linkAccount(String account) {
+            if (linked_accounts==null) {
+                linked_accounts = new HashSet<String>();
+            }
+            linked_accounts.add(account);
+        }
 }
