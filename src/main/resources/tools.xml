@@ -10,8 +10,8 @@
             <parameter name="p_storage_db"      title="Storage Database" type="string" required="false" 
                        suggestion="project_databases" width="300" />
 
-            <parameter name="p_ldap_connection" title="LDAP Connection"    type="string" required="false"
-                        width="300" />
+            <parameter name="p_ldap_connection" title="LDAP Connection"    type="string" required="false" 
+                       suggestion="project_connections"  width="300" />
             <parameter name="p_ldap_context"    title="LDAP Base Context"  type="string" required="false" 
             width="500" />
         </parameters>
@@ -42,7 +42,9 @@
                        suggestion="project_connections" width="300" />
 
             <parameter name="p_principal" title="SQL User or group"    type="string" required="true" width="400" /> 
-            <parameter name="p_ldap_connection" title="LDAP Connection" type="string" required="true" suggestion="project_connections" width="300" />
+            <parameter name="p_ldap_connection" title="LDAP Connection" type="string" required="true" 
+                       suggestion="project_connections" width="300" />
+
             <parameter name="p_ldap_context" title="LDAP Base Context"  type="string" required="true"  width="400" />
         </parameters>
 
