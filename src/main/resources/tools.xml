@@ -19,6 +19,23 @@
         <output  script="sqlserver-login-audit.groovy" type="html" />
     </tool>
     
+    <tool id="sqlserver-login-audit-co" title="Login audit with custom object" projectTypes="inventory">
+        <description>A DBMaster plugin that parses native sql server logs to get aggregated login statistics</description>
+
+        <parameters>
+            <parameter name="p_servers"   title="Servers"   type="string" required="false" multiple="true"
+                       suggestion="project_connections" width="300" />
+            <parameter name="p_resolve_hosts" title="Resolve hosts" type="boolean" required="true" defaultValue="false" />            
+
+            <parameter name="p_ldap_connection" title="LDAP Connection"    type="string" required="false" 
+                       suggestion="project_connections"  width="300" />
+            <parameter name="p_ldap_context"    title="LDAP Base Context"  type="string" required="false" 
+            width="500" />
+        </parameters>
+
+        <output  script="sqlserver-login-audit-co.groovy" type="html" />
+    </tool>
+    
     <tool id="sqlserver-login-audit-tracking" title="Login audit tracking" projectTypes="inventory">
         <description>A DBMaster plugin that parses native sql server logs to get aggregated login statistics</description>
 
