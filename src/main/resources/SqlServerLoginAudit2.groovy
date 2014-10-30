@@ -105,6 +105,7 @@ public class SqlServerLoginAudit2 {
                 }
                 return result
             }
+            
         
             search_results.each { result_item ->  
                 Attributes attributes = result_item.getAttributes()
@@ -121,6 +122,10 @@ public class SqlServerLoginAudit2 {
                 ldapAccountByName[name] = account
             }
         }
+    }
+    
+    private static String getSid() {
+        return UUID.randomUUID().toString()
     }
     
     public List<String> getSubGroups (List<String> list, account) {
@@ -175,8 +180,9 @@ public class SqlServerLoginAudit2 {
             customFieldService.mergeCustomFieldConfig(newField(principalType,"review_date",Type.DATE,false));
             customFieldService.mergeCustomFieldConfig(newField(principalType,"principal_owner",Type.STRING,false));
             customFieldService.mergeCustomFieldConfig(newField(principalType,"principal_app",Type.STRING,false));
+            customFieldService.mergeCustomFieldConfig(newField(principalType,"record_key",Type.STRING,true));
         }
-        if (principalAuditType == null){
+        if (principalAuditType == null) {
             principalAuditType = new CustomObjectTypeEntity();
             principalAuditType.setObjectName("db_principal_audit");
             principalAuditType.setCreate(true);
@@ -195,6 +201,7 @@ public class SqlServerLoginAudit2 {
             customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"review_status",Type.STRING,false));
             customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"review_notes",Type.STRING,false));
             customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"review_date",Type.DATE,false));
+            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"record_key",Type.STRING,true));
         }
         
         List<PrincipalInfo> result = []
@@ -226,7 +233,7 @@ public class SqlServerLoginAudit2 {
 
                 // Load stored principals and logon statistics for the connection
                 customService.getCustomObjectSlice(principalType.getObjectName(), 
-                    new QueryRequest("connection_name='$serverName'")).each { row -> 
+                    new QueryRequest("connection_name=\"${serverName}\"")).each { row -> 
                     
                     PrincipalInfo principal = new PrincipalInfo()
                     principal.statistics         = new NameMap<LogRecord>();
@@ -244,19 +251,21 @@ public class SqlServerLoginAudit2 {
                     principal.updated_by         = row.getUpdateAuthor()
                     
                     userMap[principal.principal_name] = principal
-                };
+                }
                 
+                logger.debug("Total principals found ${userMap.size()}")
+                logger.debug("Review date ${userMap["MOVADOGROUP\\bidservice"]?.review_date}")
+                logger.debug("Review notes ${userMap["MOVADOGROUP\\bidservice"]?.review_notes}")
                 
-                
-                customService.getCustomObjectSlice(principalAuditType.getObjectName(),
-                    new QueryRequest("connection_name='$serverName'")).each { row ->
+                def query = new QueryRequest("connection_name=\"${serverName}\"")
+                customService.getCustomObjectSlice(principalAuditType.getObjectName(), query)
+                .each { row ->
                    
                     def principal = userMap[row.getCustomData("principal_name")]
                     // TODO IF PRINCIPAL IS NULL
                     LogRecord log_item = new LogRecord()
                     log_item.record_id          = row.getId()
                     log_item.source_ip          = row.getCustomData("source_ip")
-                    // logRecord.source_host        = row.source_host
                     log_item.success_logons     = 0 // row.success_logons
                     log_item.last_success_logon = null // row.last_success_logon
                     log_item.failed_logons      = 0 // row.failed_logons
@@ -267,9 +276,9 @@ public class SqlServerLoginAudit2 {
                     log_item.updated_at         = row.getUpdated()
                     log_item.updated_by         = row.getUpdateAuthor()
                     
-                    principal.statistics[row..getCustomData("source_ip")] = log_item
+                    principal.statistics[row.getCustomData("source_ip")] = log_item
                     
-                };
+                }
                 
                 Connection connection = connector.getJdbcConnection(null)
                 dbm.closeResourceOnExit(connection)
@@ -283,6 +292,7 @@ public class SqlServerLoginAudit2 {
                                                ORDER BY name""")
                     { row ->
                         def principal = userMap[row.name]
+
                         if (principal == null) {
                             principal = new PrincipalInfo()
                             principal.statistics = new NameMap<LogRecord>()
@@ -298,6 +308,10 @@ public class SqlServerLoginAudit2 {
                         // TODO principal.updated_by        = current_user
                     }
 
+                logger.debug("Review 2 date ${userMap["MOVADOGROUP\\bidservice"]?.review_date}")
+                logger.debug("Review 2 notes ${userMap["MOVADOGROUP\\bidservice"]?.review_notes}")
+   
+
                 Statement statement = connection.createStatement()
                 
                 // log number of log files
@@ -307,7 +321,6 @@ public class SqlServerLoginAudit2 {
                 
                 // load all logs
                 logger.info("Parsing files")
-                // Date since = null
                 for (int i=0; i<=count; ++i) {
                     if (Thread.interrupted()) {
                         throw new CancellationException();
@@ -326,22 +339,14 @@ public class SqlServerLoginAudit2 {
                             String msg = rs.getString(3)
                             Matcher matcher = PATTERN.matcher(msg.trim())
                             if (!matcher.matches()) {
-                                logger.warn("Unexpected format of login message: '{}'", StringEscapeUtils.escapeHtml(msg))
+                                // TODO (vitaly) - code below does not work
+                                // logger.warn("Unexpected format of login message: '{}'", StringEscapeUtils.escapeHtml(msg))
                                 continue
                             }
                             boolean success = "succeeded".equals(matcher.group(1))
                             String user = matcher.group(2)
                             String ip = matcher.group(3)
                             Date logRecordTime = rs.getTimestamp(1)
-                            
-                            // def principalTypeFromLog = PrincipalType.UNKNOWN
-                            // MESSAGE_TO_TYPES.each { pattern, type ->
-                            //    if (msg.contains(pattern)) {
-                            //        principalTypeFromLog = type
-                            //        return
-                            //    }
-                            //}
-                            
                             
                             PrincipalInfo principal = userMap[user]
 
@@ -442,33 +447,41 @@ public class SqlServerLoginAudit2 {
         
         // Saving principals
         logger.info("Saving principals")
+        
+
         result.each { principal ->
             if (principal.record_id == 0) {
-                CustomObjectEntity object = new CustomObjectEntity();
-                object.setDiscriminator(principalType.getObjectName());  
-                object.setCustomData("connection_name",principal.connection_name);                  
-                object.setCustomData("principal_name",principal.principal_name);
-                object.setCustomData("disabled",principal.disabled);
-                object.setCustomData("principal_type",principal.principal_type);
-                object.setCustomData("review_status",principal.review_status);
-                object.setCustomData("review_notes",principal.review_notes);
-                object.setCustomData("review_date",principal.review_date);
-                object.setCustomData("principal_owner",principal.principal_owner);
-                object.setCustomData("principal_app",principal.principal_app);
-                customService.createCustomObject(object);
+                CustomObjectEntity object = new CustomObjectEntity()
+                object.setDiscriminator(principalType.getObjectName())
+                object.setCustomData("connection_name",principal.connection_name);                 
+                object.setCustomData("principal_name",principal.principal_name)
+                object.setCustomData("disabled",principal.disabled)
+                object.setCustomData("principal_type",principal.principal_type)
+                object.setCustomData("review_status",principal.review_status)
+                object.setCustomData("review_notes",principal.review_notes)
+                object.setCustomData("review_date",principal.review_date)
+                object.setCustomData("principal_owner",principal.principal_owner)
+                object.setCustomData("principal_app",principal.principal_app)
+                object.setCustomData("record_key",getSid())
+                customService.createCustomObject(object)
             } else {
-                CustomObjectEntity object = customService.findObjectById(principal.record_id);
-                object.setDiscriminator(principalType.getObjectName());
-                object.setCustomData("connection_name",principal.connection_name);
-                object.setCustomData("principal_name",principal.principal_name);
-                object.setCustomData("disabled",principal.disabled);
-                object.setCustomData("principal_type",principal.principal_type);
-                object.setCustomData("review_status",principal.review_status);
-                object.setCustomData("review_notes",principal.review_notes);
-                object.setCustomData("review_date",principal.review_date);
-                object.setCustomData("principal_owner",principal.principal_owner);
-                object.setCustomData("principal_app",principal.principal_app);
-                customService.updateCustomObject(object);
+                CustomObjectEntity object = customService.findObjectById(principal.record_id)
+                object.setCustomData("connection_name",principal.connection_name)
+                object.setCustomData("principal_name",principal.principal_name)
+                object.setCustomData("disabled",principal.disabled)
+                object.setCustomData("principal_type",principal.principal_type)
+                object.setCustomData("review_status",principal.review_status)                
+                object.setCustomData("review_notes",principal.review_notes)
+                object.setCustomData("review_date",principal.review_date)
+                object.setCustomData("principal_owner",principal.principal_owner)
+                object.setCustomData("principal_app",principal.principal_app)
+                
+                if (principal.principal_name.equals("MOVADOGROUP\\bidservice")) {
+                    logger.debug("Review 3 date ${principal.review_date}")
+                    logger.debug("Review 3 notes ${principal.review_notes}")                    
+                }
+
+                customService.updateCustomObject(object)
             }
         }
         
@@ -476,33 +489,35 @@ public class SqlServerLoginAudit2 {
         result.each { principal ->
             principal.statistics.values().each { log_item ->
                 if (log_item.record_id == 0) {
-                    CustomObjectEntity object = new CustomObjectEntity();
-                    object.setDiscriminator(principalAuditType.getObjectName());
-                    object.setCustomData("connection_name",principal.connection_name);
-                    object.setCustomData("principal_name",principal.principal_name);
-                    object.setCustomData("source_ip",log_item.source_ip);
-                    object.setCustomData("success_logons",log_item.success_logons);
-                    object.setCustomData("last_success_logon",log_item.last_success_logon);
-                    object.setCustomData("failed_logons",log_item.failed_logons);
-                    object.setCustomData("last_failed_logon",log_item.last_failed_logon);
-                    object.setCustomData("review_status",log_item.review_status);
-                    object.setCustomData("review_notes",log_item.review_notes);
-                    object.setCustomData("review_date",log_item.review_date);
-                    customService.updateCustomObject(object);
+                    CustomObjectEntity object = new CustomObjectEntity()
+                    object.setDiscriminator(principalAuditType.getObjectName())
+                    object.setCustomData("connection_name",principal.connection_name)
+                    object.setCustomData("principal_name",principal.principal_name)
+                    object.setCustomData("source_ip",log_item.source_ip)
+                    object.setCustomData("source_host",log_item.source_host)
+                    object.setCustomData("success_logons",log_item.success_logons)
+                    object.setCustomData("last_success_logon",log_item.last_success_logon)
+                    object.setCustomData("failed_logons",log_item.failed_logons)
+                    object.setCustomData("last_failed_logon",log_item.last_failed_logon)
+                    object.setCustomData("review_status",log_item.review_status)
+                    object.setCustomData("review_notes",log_item.review_notes)
+                    object.setCustomData("review_date",log_item.review_date)
+                    object.setCustomData("record_key",getSid())
+                    customService.createCustomObject(object)
                 } else {
-                    CustomObjectEntity object = customService.findObjectById(principal.record_id);
-                    object.setDiscriminator(principalAuditType.getObjectName());
-                    object.setCustomData("connection_name",principal.connection_name);
-                    object.setCustomData("principal_name",principal.principal_name);
-                    object.setCustomData("source_ip",log_item.source_ip);
-                    object.setCustomData("success_logons",log_item.success_logons);
-                    object.setCustomData("last_success_logon",log_item.last_success_logon);
-                    object.setCustomData("failed_logons",log_item.failed_logons);
-                    object.setCustomData("last_failed_logon",log_item.last_failed_logon);
-                    object.setCustomData("review_status",log_item.review_status);
-                    object.setCustomData("review_notes",log_item.review_notes);
-                    object.setCustomData("review_date",log_item.review_date);
-                    customService.updateCustomObject(object);
+                    CustomObjectEntity object = customService.findObjectById(log_item.record_id)
+                    object.setCustomData("connection_name",principal.connection_name)
+                    object.setCustomData("principal_name",principal.principal_name)
+                    object.setCustomData("source_ip",log_item.source_ip)
+                    object.setCustomData("source_host",log_item.source_host)
+                    object.setCustomData("success_logons",log_item.success_logons)
+                    object.setCustomData("last_success_logon",log_item.last_success_logon)
+                    object.setCustomData("failed_logons",log_item.failed_logons)
+                    object.setCustomData("last_failed_logon",log_item.last_failed_logon)
+                    object.setCustomData("review_status",log_item.review_status)
+                    object.setCustomData("review_notes",log_item.review_notes)
+                    object.setCustomData("review_date",log_item.review_date)
+                    customService.updateCustomObject(object)
                 }
             }
         }
