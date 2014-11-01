@@ -144,15 +144,14 @@ public class SqlServerLoginAudit2 {
         return list
     }
     
-    private CustomFieldConfig newField(CustomObjectTypeEntity entityType,String name,Type type, boolean required){
+    private CustomFieldConfig newField(String name,Type type, boolean required){
         CustomFieldConfig config = new CustomFieldConfig();
-        config.setClazz(entityType.getObjectName());
         config.setName(name);
         config.setType(type);
         config.setRequired(required);
         return config;
     }
-    
+
     public List<PrincipalInfo> getLoginAuditList(String[] servers, 
                                                    boolean resolveHosts, 
                                                    String ldapConnection,
@@ -171,16 +170,18 @@ public class SqlServerLoginAudit2 {
             
             principalType = customService.createCustomObjectType(principalType);
             
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"connection_name",Type.STRING,true));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"principal_name",Type.STRING,true));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"principal_disabled",Type.BOOLEAN,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"principal_type",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"review_status",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"review_notes",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"review_date",Type.DATE,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"principal_owner",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"principal_app",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalType,"record_key",Type.STRING,true));
+            customFieldService.createCustomFieldConfig(principalType,newField("connection_name",Type.STRING,true),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("principal_name",Type.STRING,true),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("principal_disabled",Type.BOOLEAN,false),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("principal_type",Type.STRING,false),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("review_status",Type.STRING,false),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("review_notes",Type.TEXT,false),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("review_date",Type.DATE,false),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("principal_owner",Type.STRING,false),false);
+            customFieldService.createCustomFieldConfig(principalType,newField("principal_app",Type.STRING,false),false);
+            def key = newField("record_key",Type.STRING,true)
+            key.setKey(true);
+            customFieldService.createCustomFieldConfig(principalType,key,false);
         }
         if (principalAuditType == null) {
             principalAuditType = new CustomObjectTypeEntity();
@@ -190,20 +191,22 @@ public class SqlServerLoginAudit2 {
             principalAuditType.setDelete(true);
             
             principalAuditType = customService.createCustomObjectType(principalAuditType);
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"connection_name",Type.STRING,true));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"principal_name",Type.STRING,true));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"source_ip",Type.STRING,true));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"source_host",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"success_logons",Type.INTEGER,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"last_success_logon",Type.DATE,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"failed_logons",Type.INTEGER,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"last_failed_logon",Type.DATE,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"review_status",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"review_notes",Type.STRING,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"review_date",Type.DATE,false));
-            customFieldService.mergeCustomFieldConfig(newField(principalAuditType,"record_key",Type.STRING,true));
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("connection_name",Type.STRING,true),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("principal_name",Type.STRING,true),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("source_ip",Type.STRING,true),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("source_host",Type.STRING,false),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("success_logons",Type.INTEGER,false),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("last_success_logon",Type.DATE,false),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("failed_logons",Type.INTEGER,false),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("last_failed_logon",Type.DATE,false),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("review_status",Type.STRING,false),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("review_notes",Type.TEXT,false),false);
+            customFieldService.createCustomFieldConfig(principalAuditType,newField("review_date",Type.DATE,false),false);
+            def key = newField("record_key",Type.STRING,true)
+            key.setKey(true);
+            customFieldService.createCustomFieldConfig(principalAuditType,key,false);
         }
-        
+                
         List<PrincipalInfo> result = []
 
         Pattern PATTERN = Pattern.compile("Login (succeeded|failed) for user '([^']+)'[^\\[]+\\[CLIENT: ([^\\]]*)\\]\\s*")
