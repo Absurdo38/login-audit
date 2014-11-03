@@ -22,12 +22,11 @@ println "<td>Successful Logins</td>"
 println "<td>Last Success Time</td>"
 println "<td>Failed Logins</td>"
 println "<td>Last Failed Time</td>"
-// println "<td>Principal Log Status</td>"
 println "<td>Log Records Since</td>"
 println "</tr>"
 
 def loginAudit =new SqlServerLoginAudit(dbm, logger)
-result = loginAudit.getLoginAuditList(p_servers, p_resolve_hosts, p_ldap_connection, p_ldap_context, p_storage_db)
+result = loginAudit.getLoginAuditList(p_servers, p_resolve_hosts, p_ldap_connection, p_ldap_context)
                                   
 result.each { principal ->
 
@@ -102,7 +101,6 @@ result.each { principal ->
         println "<td>${getNotNull(stat.last_success_logon)}</td>"
         println "<td style='text-align:right'>${stat.failed_logons}</td>"
         println "<td>${getNotNull(stat.last_failed_logon)}</td>"
-        // println "<td>${getNotNull(v[index++])}</td>"
         println "<td>${getNotNull(loginAudit.since)}</td>"
     }
     println "</tr>"

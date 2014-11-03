@@ -1,34 +1,35 @@
-import java.text.SimpleDateFormat
-import java.text.DateFormat
-import java.util.regex.Matcher
+    import groovy.json.StringEscapeUtils
+import groovy.sql.Sql
+import io.dbmaster.tools.login.audit.*
+
+import java.sql.Connection
 import java.sql.ResultSet
 import java.sql.Statement
-import java.sql.Connection
-import java.sql.ResultSetMetaData
-import java.util.*
-import java.util.regex.Pattern
 import java.util.concurrent.CancellationException
+import java.util.regex.Matcher
+import java.util.regex.Pattern
 
-import groovy.sql.Sql
-
-import org.slf4j.Logger
-import org.apache.commons.io.IOUtils
-import org.apache.commons.lang.StringEscapeUtils
-
-import com.branegy.scripting.DbMaster
-import com.branegy.dbmaster.database.api.ModelService
-import com.branegy.dbmaster.model.*
-import com.branegy.service.connection.api.ConnectionService
-import com.branegy.dbmaster.connection.ConnectionProvider
-import com.branegy.dbmaster.connection.JdbcConnector
-import com.branegy.dbmaster.util.NameMap
-
-import io.dbmaster.tools.login.audit.*
 import io.dbmaster.tools.ldap.LdapSearch
 
 import javax.naming.*
 import javax.naming.directory.*
 import javax.naming.ldap.*
+
+import org.slf4j.Logger
+
+import com.branegy.dbmaster.connection.ConnectionProvider
+import com.branegy.dbmaster.connection.JdbcConnector
+import com.branegy.dbmaster.custom.CustomFieldConfig
+import com.branegy.dbmaster.custom.CustomObjectEntity
+import com.branegy.dbmaster.custom.CustomObjectService
+import com.branegy.dbmaster.custom.CustomObjectTypeEntity
+import com.branegy.dbmaster.custom.CustomFieldConfig.Type
+import com.branegy.dbmaster.custom.field.server.api.ICustomFieldService
+import com.branegy.dbmaster.model.*
+import com.branegy.dbmaster.util.NameMap
+import com.branegy.scripting.DbMaster
+import com.branegy.service.connection.api.ConnectionService
+import com.branegy.service.core.QueryRequest
 
 public class SqlServerLoginAudit { 
     
@@ -104,6 +105,7 @@ public class SqlServerLoginAudit {
                 }
                 return result
             }
+            
         
             search_results.each { result_item ->  
                 Attributes attributes = result_item.getAttributes()
@@ -122,6 +124,10 @@ public class SqlServerLoginAudit {
         }
     }
     
+    private static String getSid() {
+        return UUID.randomUUID().toString()
+    }
+    
     public List<String> getSubGroups (List<String> list, account) {
         account.member_of.each { member_of_dn ->
             def group = ldapAccountByDN[member_of_dn]
@@ -138,34 +144,95 @@ public class SqlServerLoginAudit {
         return list
     }
     
+    private CustomFieldConfig newField(String name,Type type, boolean required){
+        CustomFieldConfig config = new CustomFieldConfig();
+        config.setName(name);
+        config.setType(type);
+        config.setRequired(required);
+        return config;
+    }
+
     public List<PrincipalInfo> getLoginAuditList(String[] servers, 
                                                    boolean resolveHosts, 
                                                    String ldapConnection,
-                                                   String ldapContext,
-                                                   String storageDB) {
+                                                   String ldapContext) {
+                                                   
+        def principalStorageType = "sql_account2";
+        def statisticsStorageType = "sql_logon_statistics2";
+        
+        CustomObjectService customService = dbm.getService(CustomObjectService.class)
+        ICustomFieldService cfService = dbm.getService(ICustomFieldService.class)
+        List<CustomObjectTypeEntity> types = customService.getCustomObjectTypeList()
+        CustomObjectTypeEntity principalType = types.find { it.getObjectName().equals(principalStorageType)}
+        CustomObjectTypeEntity principalAuditType = types.find { it.getObjectName().equals(statisticsStorageType)}
+
+        def createField  = { service, metaType, fieldName, fieldType, required, readonly ->
+            CustomFieldConfig field = new CustomFieldConfig()
+            field.setName(fieldName)
+            field.setType(fieldType)
+            field.setRequired(required)
+            field.setReadonly(readonly)
+            service.createCustomFieldConfig(metaType,field,false)
+        }
+        
+        if (principalType == null) {
+            logger.info("Adding ${principalStorageType} type as it does not exist")
+
+            principalType = new CustomObjectTypeEntity();
+            principalType.setObjectName(principalStorageType)
+            principalType.setCreate(false)
+            principalType.setUpdate(true)
+            principalType.setDelete(true)
+            
+            principalType = customService.createCustomObjectType(principalType)
+
+            def key = newField("record_key",Type.STRING,true)
+            key.setKey(true);
+            key.setReadonly(true)
+            cfService.createCustomFieldConfig(principalType,key,false);            
+            createField(cfService, principalType, "connection_name",Type.STRING,true,true);
+            createField(cfService, principalType, "principal_name",Type.STRING,true,true);
+            createField(cfService, principalType, "disabled",Type.BOOLEAN,false,true);
+            createField(cfService, principalType, "principal_type",Type.STRING,false,true);
+            createField(cfService, principalType, "principal_owner",Type.STRING,false,false);
+            createField(cfService, principalType, "principal_app",Type.STRING,false,false);
+            createField(cfService, principalType, "review_status",Type.STRING,false,false);
+            createField(cfService, principalType, "review_date",Type.DATE,false,false);
+            createField(cfService, principalType, "review_notes",Type.TEXT,false,false);
+        }
+
+        if (principalAuditType == null) {
+            logger.info("Adding ${statisticsStorageType} type as it does not exist")
+            
+            principalAuditType = new CustomObjectTypeEntity();
+            principalAuditType.setObjectName(statisticsStorageType);
+            principalAuditType.setCreate(false)
+            principalAuditType.setUpdate(true)
+            principalAuditType.setDelete(true)
+            
+            principalAuditType = customService.createCustomObjectType(principalAuditType);
+            createField(cfService, principalAuditType,"connection_name",Type.STRING,true,true);
+            createField(cfService, principalAuditType,"principal_name",Type.STRING,true,true);
+            createField(cfService, principalAuditType,"source_ip",Type.STRING,true,true);
+            createField(cfService, principalAuditType,"source_host",Type.STRING,false,true);
+            createField(cfService, principalAuditType,"success_logons",Type.INTEGER,false,true);
+            createField(cfService, principalAuditType,"last_success_logon",Type.DATE,false,true);
+            createField(cfService, principalAuditType,"failed_logons",Type.INTEGER,false,true);
+            createField(cfService, principalAuditType,"last_failed_logon",Type.DATE,false,true);
+            createField(cfService, principalAuditType,"review_status",Type.STRING,false,false);
+            createField(cfService, principalAuditType,"review_date",Type.DATE,false,false);
+            createField(cfService, principalAuditType,"review_notes",Type.TEXT,false,false);
+            def key = newField("record_key",Type.STRING,true)
+            key.setKey(true);
+            key.setReadonly(true);
+            cfService.createCustomFieldConfig(principalAuditType, key, false);
+        }
+                
         List<PrincipalInfo> result = []
 
         Pattern PATTERN = Pattern.compile("Login (succeeded|failed) for user '([^']+)'[^\\[]+\\[CLIENT: ([^\\]]*)\\]\\s*")
         def connectionSrv = dbm.getService(ConnectionService.class)
         
-        Sql storageSql = null
-        
-        if (storageDB!=null) {
-            def server_name    = storageDB.split("\\.")[0]
-            def database_name  = storageDB.split("\\.")[1]
-
-            def connector = ConnectionProvider.getConnector(connectionSrv.findByName(server_name))
-            if (!(connector instanceof JdbcConnector)) {
-                // TODO: have to be an error
-                logger.info("Storage is not a database. Skipping storage option")
-            } else {
-                logger.info("Connecting to storage at ${server_name} database ${database_name}")
-                def storageConnection = connector.getJdbcConnection(database_name)
-                dbm.closeResourceOnExit(storageConnection)
-                storageSql = Sql.newInstance(storageConnection)
-            }
-        }
-
         setupLdapAccounts(ldapConnection,ldapContext)
         
         def dbConnections
@@ -189,61 +256,50 @@ public class SqlServerLoginAudit {
                 }
 
                 // Load stored principals and logon statistics for the connection
-                if (storageSql!=null) {
-                    storageSql.eachRow("""select record_id,principal_name,principal_disabled,
-                                                 principal_type,review_status,review_notes,review_date,
-                                                 principal_owner,principal_app,updated_at,updated_by
-                                            from dbm_db_principal
-                                           where connection_name = $serverName""") 
-                    { row ->
-                        PrincipalInfo principal = new PrincipalInfo()
-                        principal.statistics         = new NameMap<LogRecord>();
-                        principal.record_id          = row.record_id
-                        principal.connection_name    = serverName
-                        principal.principal_name     = row.principal_name
-                        principal.disabled           = row.principal_disabled   // TODO: override
-                        principal.principal_type     = row.principal_type       // TODO: override
-                        principal.review_status      = row.review_status
-                        principal.review_notes       = row.review_notes
-                        
-                        if (principal.review_notes instanceof java.sql.Clob) {
-                            principal.review_notes = IOUtils.toString(principal.review_notes.getCharacterStream())
-                        }
-                        
-                        principal.review_date        = row.review_date 
-                        principal.principal_owner    = row.principal_owner
-                        principal.principal_app      = row.principal_app
-                        principal.updated_at         = row.updated_at
-                        principal.updated_by         = row.updated_by
-                        
-                        userMap[row.principal_name] = principal
-                    }
+                customService.getCustomObjectSlice(principalType.getObjectName(), 
+                    new QueryRequest("connection_name=\"${serverName}\"")).each { row -> 
                     
-                    storageSql.eachRow("""select record_id, principal_name, source_ip,
-                                                 source_host,success_logons,last_success_logon,failed_logons,
-                                                 last_failed_logon,review_status,review_notes,review_date,
-                                                 updated_at,updated_by
-                                            from dbm_db_principal_audit
-                                           where connection_name = $serverName""") 
-                    { row ->
-                        def principal = userMap[row.principal_name]
-                        // TODO IF PRINCIPAL IS NULL
-                        LogRecord log_item = new LogRecord()
-                        log_item.record_id          = row.record_id
-                        log_item.source_ip          = row.source_ip
-                        // logRecord.source_host        = row.source_host
-                        log_item.success_logons     = 0 // row.success_logons
-                        log_item.last_success_logon = null // row.last_success_logon
-                        log_item.failed_logons      = 0 // row.failed_logons
-                        log_item.last_failed_logon  = null // row.last_failed_logon
-                        log_item.review_status      = row.review_status
-                        log_item.review_notes       = row.review_notes
-                        log_item.review_date        = row.review_date
-                        log_item.updated_at         = row.updated_at
-                        log_item.updated_by         = row.updated_by
-                        
-                        principal.statistics[row.source_ip] = log_item
-                    }
+                    PrincipalInfo principal = new PrincipalInfo()
+                    principal.statistics         = new NameMap<LogRecord>();
+                    principal.record_id          = row.getId()
+                    principal.connection_name    = serverName
+                    principal.principal_name     = row.getCustomData("principal_name")
+                    principal.disabled           = row.getCustomData("disabled")  // TODO: override
+                    principal.principal_type     = row.getCustomData("principal_type")      // TODO: override
+                    principal.principal_owner    = row.getCustomData("principal_owner")
+                    principal.principal_app      = row.getCustomData("principal_app")
+                    principal.review_status      = row.getCustomData("review_status")
+                    principal.review_date        = row.getCustomData("review_date")
+                    principal.review_notes       = row.getCustomData("review_notes")
+                    principal.updated_at         = row.getUpdated()
+                    principal.updated_by         = row.getUpdateAuthor()
+                    
+                    userMap[principal.principal_name] = principal
+                }
+                
+                logger.debug("Total principals found ${userMap.size()}")
+                
+                def query = new QueryRequest("connection_name=\"${serverName}\"")
+                customService.getCustomObjectSlice(principalAuditType.getObjectName(), query)
+                .each { row ->
+                   
+                    def principal = userMap[row.getCustomData("principal_name")]
+                    // TODO IF PRINCIPAL IS NULL
+                    LogRecord log_item = new LogRecord()
+                    log_item.record_id          = row.getId()
+                    log_item.source_ip          = row.getCustomData("source_ip")
+                    log_item.success_logons     = 0 // row.success_logons
+                    log_item.last_success_logon = null // row.last_success_logon
+                    log_item.failed_logons      = 0 // row.failed_logons
+                    log_item.last_failed_logon  = null // row.last_failed_logon
+                    log_item.review_status      = row.getCustomData("review_status")
+                    log_item.review_notes       = row.getCustomData("review_notes")
+                    log_item.review_date        = row.getCustomData("review_date")
+                    log_item.updated_at         = row.getUpdated()
+                    log_item.updated_by         = row.getUpdateAuthor()
+                    
+                    principal.statistics[row.getCustomData("source_ip")] = log_item
+                    
                 }
                 
                 Connection connection = connector.getJdbcConnection(null)
@@ -258,6 +314,7 @@ public class SqlServerLoginAudit {
                                                ORDER BY name""")
                     { row ->
                         def principal = userMap[row.name]
+
                         if (principal == null) {
                             principal = new PrincipalInfo()
                             principal.statistics = new NameMap<LogRecord>()
@@ -282,7 +339,6 @@ public class SqlServerLoginAudit {
                 
                 // load all logs
                 logger.info("Parsing files")
-                // Date since = null
                 for (int i=0; i<=count; ++i) {
                     if (Thread.interrupted()) {
                         throw new CancellationException();
@@ -301,22 +357,14 @@ public class SqlServerLoginAudit {
                             String msg = rs.getString(3)
                             Matcher matcher = PATTERN.matcher(msg.trim())
                             if (!matcher.matches()) {
-                                logger.warn("Unexpected format of login message: '{}'", StringEscapeUtils.escapeHtml(msg))
+                                // TODO (vitaly) - code below does not work
+                                logger.warn("Unexpected format of login message: '{}'", StringEscapeUtils.escapeJavaScript(msg))
                                 continue
                             }
                             boolean success = "succeeded".equals(matcher.group(1))
                             String user = matcher.group(2)
                             String ip = matcher.group(3)
                             Date logRecordTime = rs.getTimestamp(1)
-                            
-                            // def principalTypeFromLog = PrincipalType.UNKNOWN
-                            // MESSAGE_TO_TYPES.each { pattern, type ->
-                            //    if (msg.contains(pattern)) {
-                            //        principalTypeFromLog = type
-                            //        return
-                            //    }
-                            //}
-                            
                             
                             PrincipalInfo principal = userMap[user]
 
@@ -414,119 +462,78 @@ public class SqlServerLoginAudit {
         }
         result.sort { a, b -> a.connection_name.compareToIgnoreCase(b.connection_name)*10000+
                               a.principal_name.compareToIgnoreCase(b.principal_name) }
-        if (storageSql!=null) {
-            try { 
-                logger.info("Saving principals")
-                result.each { principal ->
-                    String query;
-                    def queryParameters;
-                    if (principal.record_id == 0) {
-                        query = """insert into dbo.dbm_db_principal (
-                                      connection_name,principal_name,principal_disabled,
-                                      principal_type,review_status,review_notes,review_date,
-                                      principal_owner,principal_app,updated_at,updated_by )
-                                   values (?,?,?,?,?,?,?,?,?,?,?)"""
-                                      
-                        queryParameters =  [
-                                principal.connection_name,
-                                principal.principal_name,
-                                principal.disabled == null ? null : principal.disabled ? 1 : 0,
-                                principal.principal_type,
-                                principal.review_status,
-                                principal.review_notes,
-                                principal.review_date,
-                                principal.principal_owner,
-                                principal.principal_app,
-                                principal.updated_at,
-                                principal.updated_by ]
-                        
-                    } else {
-                        query = """update dbo.dbm_db_principal set
-                                      connection_name=?,principal_name=?,principal_disabled=?,
-                                      principal_type=?,review_status=?,review_notes=?,review_date=?,
-                                      principal_owner=?,principal_app=?,updated_at=?,updated_by=? where record_id=?"""
-                                      
-                        queryParameters =  [
-                                principal.connection_name,
-                                principal.principal_name,
-                                principal.disabled == null ? null : principal.disabled ? 1 : 0,
-                                principal.principal_type,
-                                principal.review_status,
-                                principal.review_notes,
-                                principal.review_date,
-                                principal.principal_owner,
-                                principal.principal_app,
-                                principal.updated_at,
-                                principal.updated_by,
-                                principal.record_id ]
-                    }
-                    storageSql.executeUpdate(query, queryParameters)
-                }
-                logger.info("Saving statistics")
+        
+        // Saving principals
+        logger.info("Saving principals")
+        
 
-                result.each { principal ->
-                    principal.statistics.values().each { log_item ->
-                        String query
-                        def queryParameters
-                        if (log_item.record_id == 0) {
-                            query = """insert into dbo.dbm_db_principal_audit (
-                                          connection_name,principal_name,source_ip,source_host,
-                                          success_logons,last_success_logon,failed_logons,last_failed_logon,
-                                          review_status,review_notes,review_date,updated_at,updated_by
-                                        )
-                                       values (?,?,?,?,?,?,?,?,?,?,?,?,?)"""
-
-                            queryParameters =  [
-                                    principal.connection_name,
-                                    principal.principal_name,
-                                    log_item.source_ip,
-                                    log_item.source_host,
-                                    log_item.success_logons,
-                                    log_item.last_success_logon,
-                                    log_item.failed_logons,
-                                    log_item.last_failed_logon,
-                                    log_item.review_status,
-                                    log_item.review_notes,
-                                    log_item.review_date,
-                                    log_item.updated_at,
-                                    log_item.updated_by ]
-                            
-                        } else {
-                            query = """update dbo.dbm_db_principal_audit set
-                                          connection_name=?,principal_name=?,source_ip=?,source_host=?,
-                                          success_logons=?,last_success_logon=?,failed_logons=?,last_failed_logon=?,
-                                          review_status=?,review_notes=?,review_date=?,updated_at=?,updated_by=?
-                                       where record_id=?"""
-                                          
-                            queryParameters =  [
-                                    principal.connection_name,
-                                    principal.principal_name,
-                                    log_item.source_ip,
-                                    log_item.source_host,
-                                    log_item.success_logons,
-                                    log_item.last_success_logon,
-                                    log_item.failed_logons,
-                                    log_item.last_failed_logon,
-                                    log_item.review_status,
-                                    log_item.review_notes,
-                                    log_item.review_date,
-                                    log_item.updated_at,
-                                    log_item.updated_by,
-                                    log_item.record_id ]
-                        }
-                        storageSql.executeUpdate(query, queryParameters)
-                    }
+        result.each { principal ->
+            if (principal.record_id == 0) {
+                CustomObjectEntity object = new CustomObjectEntity()
+                object.setDiscriminator(principalType.getObjectName())
+                object.setCustomData("connection_name",principal.connection_name);                 
+                object.setCustomData("principal_name",principal.principal_name)
+                object.setCustomData("disabled",principal.disabled)
+                object.setCustomData("principal_type",principal.principal_type)
+                object.setCustomData("review_status",principal.review_status)
+                object.setCustomData("review_notes",principal.review_notes)
+                object.setCustomData("review_date",principal.review_date)
+                object.setCustomData("principal_owner",principal.principal_owner)
+                object.setCustomData("principal_app",principal.principal_app)
+                object.setCustomData("record_key",getSid())
+                customService.createCustomObject(object)
+            } else {
+                CustomObjectEntity object = customService.findObjectById(principal.record_id)
+                object.setCustomData("connection_name",principal.connection_name)
+                object.setCustomData("principal_name",principal.principal_name)
+                object.setCustomData("disabled",principal.disabled)
+                object.setCustomData("principal_type",principal.principal_type)
+                object.setCustomData("review_status",principal.review_status)                
+                object.setCustomData("review_notes",principal.review_notes)
+                object.setCustomData("review_date",principal.review_date)
+                object.setCustomData("principal_owner",principal.principal_owner)
+                object.setCustomData("principal_app",principal.principal_app)
+                
+                customService.updateCustomObject(object)
+            }
+        }
+        
+        logger.info("Saving statistics")
+        result.each { principal ->
+            principal.statistics.values().each { log_item ->
+                if (log_item.record_id == 0) {
+                    CustomObjectEntity object = new CustomObjectEntity()
+                    object.setDiscriminator(principalAuditType.getObjectName())
+                    object.setCustomData("connection_name",principal.connection_name)
+                    object.setCustomData("principal_name",principal.principal_name)
+                    object.setCustomData("source_ip",log_item.source_ip)
+                    object.setCustomData("source_host",log_item.source_host)
+                    object.setCustomData("success_logons",log_item.success_logons)
+                    object.setCustomData("last_success_logon",log_item.last_success_logon)
+                    object.setCustomData("failed_logons",log_item.failed_logons)
+                    object.setCustomData("last_failed_logon",log_item.last_failed_logon)
+                    object.setCustomData("review_status",log_item.review_status)
+                    object.setCustomData("review_notes",log_item.review_notes)
+                    object.setCustomData("review_date",log_item.review_date)
+                    object.setCustomData("record_key",getSid())
+                    customService.createCustomObject(object)
+                } else {
+                    CustomObjectEntity object = customService.findObjectById(log_item.record_id)
+                    object.setCustomData("connection_name",principal.connection_name)
+                    object.setCustomData("principal_name",principal.principal_name)
+                    object.setCustomData("source_ip",log_item.source_ip)
+                    object.setCustomData("source_host",log_item.source_host)
+                    object.setCustomData("success_logons",log_item.success_logons)
+                    object.setCustomData("last_success_logon",log_item.last_success_logon)
+                    object.setCustomData("failed_logons",log_item.failed_logons)
+                    object.setCustomData("last_failed_logon",log_item.last_failed_logon)
+                    object.setCustomData("review_status",log_item.review_status)
+                    object.setCustomData("review_notes",log_item.review_notes)
+                    object.setCustomData("review_date",log_item.review_date)
+                    customService.updateCustomObject(object)
                 }
-                storageSql.commit()
-            } catch (Exception e) {
-                logger.error("Cannot save data ${e.message()}")
-                e.printStackTrace()
-                storageSql.rollback()
-            } finally {
-                storageSql.close()
             }
         }
         return result;
     }
-
 }
