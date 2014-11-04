@@ -1,4 +1,4 @@
-    import groovy.json.StringEscapeUtils
+import groovy.json.StringEscapeUtils
 import groovy.sql.Sql
 import io.dbmaster.tools.login.audit.*
 
@@ -157,8 +157,8 @@ public class SqlServerLoginAudit {
                                                    String ldapConnection,
                                                    String ldapContext) {
                                                    
-        def principalStorageType = "sql_account2";
-        def statisticsStorageType = "sql_logon_statistics2";
+        def principalStorageType = "sql account";
+        def statisticsStorageType = "sql account statistics";
         
         CustomObjectService customService = dbm.getService(CustomObjectService.class)
         ICustomFieldService cfService = dbm.getService(ICustomFieldService.class)
@@ -186,19 +186,19 @@ public class SqlServerLoginAudit {
             
             principalType = customService.createCustomObjectType(principalType)
 
-            def key = newField("record_key",Type.STRING,true)
+            def key = newField("Record key",Type.STRING,true)
             key.setKey(true);
             key.setReadonly(true)
             cfService.createCustomFieldConfig(principalType,key,false);            
-            createField(cfService, principalType, "connection_name",Type.STRING,true,true);
-            createField(cfService, principalType, "principal_name",Type.STRING,true,true);
-            createField(cfService, principalType, "disabled",Type.BOOLEAN,false,true);
-            createField(cfService, principalType, "principal_type",Type.STRING,false,true);
-            createField(cfService, principalType, "principal_owner",Type.STRING,false,false);
-            createField(cfService, principalType, "principal_app",Type.STRING,false,false);
-            createField(cfService, principalType, "review_status",Type.STRING,false,false);
-            createField(cfService, principalType, "review_date",Type.DATE,false,false);
-            createField(cfService, principalType, "review_notes",Type.TEXT,false,false);
+            createField(cfService, principalType, "Server",Type.STRING,true,true);
+            createField(cfService, principalType, "Account name",Type.STRING,true,true);
+            createField(cfService, principalType, "Disabled",Type.BOOLEAN,false,true);
+            createField(cfService, principalType, "Account type",Type.STRING,false,true);
+            createField(cfService, principalType, "Account owner",Type.STRING,false,false);
+            createField(cfService, principalType, "Application",Type.STRING,false,false);
+            createField(cfService, principalType, "Review status",Type.STRING,false,false);
+            createField(cfService, principalType, "Review date",Type.DATE,false,false);
+            createField(cfService, principalType, "Review notes",Type.TEXT,false,false);
         }
 
         if (principalAuditType == null) {
@@ -211,21 +211,23 @@ public class SqlServerLoginAudit {
             principalAuditType.setDelete(true)
             
             principalAuditType = customService.createCustomObjectType(principalAuditType);
-            createField(cfService, principalAuditType,"connection_name",Type.STRING,true,true);
-            createField(cfService, principalAuditType,"principal_name",Type.STRING,true,true);
-            createField(cfService, principalAuditType,"source_ip",Type.STRING,true,true);
-            createField(cfService, principalAuditType,"source_host",Type.STRING,false,true);
-            createField(cfService, principalAuditType,"success_logons",Type.INTEGER,false,true);
-            createField(cfService, principalAuditType,"last_success_logon",Type.DATE,false,true);
-            createField(cfService, principalAuditType,"failed_logons",Type.INTEGER,false,true);
-            createField(cfService, principalAuditType,"last_failed_logon",Type.DATE,false,true);
-            createField(cfService, principalAuditType,"review_status",Type.STRING,false,false);
-            createField(cfService, principalAuditType,"review_date",Type.DATE,false,false);
-            createField(cfService, principalAuditType,"review_notes",Type.TEXT,false,false);
-            def key = newField("record_key",Type.STRING,true)
+
+            def key = newField("Record key",Type.STRING,true)
             key.setKey(true);
             key.setReadonly(true);
             cfService.createCustomFieldConfig(principalAuditType, key, false);
+
+            createField(cfService, principalAuditType,"Server",Type.STRING,true,true);
+            createField(cfService, principalAuditType,"Account name",Type.STRING,true,true);
+            createField(cfService, principalAuditType,"Source ip",Type.STRING,true,true);
+            createField(cfService, principalAuditType,"Source host",Type.STRING,false,true);
+            createField(cfService, principalAuditType,"Success logons",Type.INTEGER,false,true);
+            createField(cfService, principalAuditType,"Last success logon",Type.DATE,false,true);
+            createField(cfService, principalAuditType,"Failed logons",Type.INTEGER,false,true);
+            createField(cfService, principalAuditType,"Last failed logon",Type.DATE,false,true);
+            createField(cfService, principalAuditType,"Review status",Type.STRING,false,false);
+            createField(cfService, principalAuditType,"Review date",Type.DATE,false,false);
+            createField(cfService, principalAuditType,"Review notes",Type.TEXT,false,false);
         }
                 
         List<PrincipalInfo> result = []
@@ -263,14 +265,14 @@ public class SqlServerLoginAudit {
                     principal.statistics         = new NameMap<LogRecord>();
                     principal.record_id          = row.getId()
                     principal.connection_name    = serverName
-                    principal.principal_name     = row.getCustomData("principal_name")
-                    principal.disabled           = row.getCustomData("disabled")  // TODO: override
-                    principal.principal_type     = row.getCustomData("principal_type")      // TODO: override
-                    principal.principal_owner    = row.getCustomData("principal_owner")
-                    principal.principal_app      = row.getCustomData("principal_app")
-                    principal.review_status      = row.getCustomData("review_status")
-                    principal.review_date        = row.getCustomData("review_date")
-                    principal.review_notes       = row.getCustomData("review_notes")
+                    principal.principal_name     = row.getCustomData("Account name")
+                    principal.disabled           = row.getCustomData("Disabled")  // TODO: override
+                    principal.principal_type     = row.getCustomData("Account type")      // TODO: override
+                    principal.principal_owner    = row.getCustomData("Account owner")
+                    principal.principal_app      = row.getCustomData("Application")
+                    principal.review_status      = row.getCustomData("Review status")
+                    principal.review_date        = row.getCustomData("Review date")
+                    principal.review_notes       = row.getCustomData("Review notes")
                     principal.updated_at         = row.getUpdated()
                     principal.updated_by         = row.getUpdateAuthor()
                     
@@ -287,19 +289,18 @@ public class SqlServerLoginAudit {
                     // TODO IF PRINCIPAL IS NULL
                     LogRecord log_item = new LogRecord()
                     log_item.record_id          = row.getId()
-                    log_item.source_ip          = row.getCustomData("source_ip")
+                    log_item.source_ip          = row.getCustomData("Source ip")
                     log_item.success_logons     = 0 // row.success_logons
                     log_item.last_success_logon = null // row.last_success_logon
                     log_item.failed_logons      = 0 // row.failed_logons
                     log_item.last_failed_logon  = null // row.last_failed_logon
-                    log_item.review_status      = row.getCustomData("review_status")
-                    log_item.review_notes       = row.getCustomData("review_notes")
-                    log_item.review_date        = row.getCustomData("review_date")
+                    log_item.review_status      = row.getCustomData("Review status")
+                    log_item.review_notes       = row.getCustomData("Review notes")
+                    log_item.review_date        = row.getCustomData("Review date")
                     log_item.updated_at         = row.getUpdated()
                     log_item.updated_by         = row.getUpdateAuthor()
                     
-                    principal.statistics[row.getCustomData("source_ip")] = log_item
-                    
+                    principal.statistics[row.getCustomData("Source ip")] = log_item                    
                 }
                 
                 Connection connection = connector.getJdbcConnection(null)
@@ -358,7 +359,8 @@ public class SqlServerLoginAudit {
                             Matcher matcher = PATTERN.matcher(msg.trim())
                             if (!matcher.matches()) {
                                 // TODO (vitaly) - code below does not work
-                                logger.warn("Unexpected format of login message: '{}'", StringEscapeUtils.escapeJavaScript(msg))
+                                logger.warn("Unexpected format of login message: '{}'", 
+                                            StringEscapeUtils.escapeJavaScript(msg))
                                 continue
                             }
                             boolean success = "succeeded".equals(matcher.group(1))
@@ -471,29 +473,28 @@ public class SqlServerLoginAudit {
             if (principal.record_id == 0) {
                 CustomObjectEntity object = new CustomObjectEntity()
                 object.setDiscriminator(principalType.getObjectName())
-                object.setCustomData("connection_name",principal.connection_name);                 
-                object.setCustomData("principal_name",principal.principal_name)
-                object.setCustomData("disabled",principal.disabled)
-                object.setCustomData("principal_type",principal.principal_type)
-                object.setCustomData("review_status",principal.review_status)
-                object.setCustomData("review_notes",principal.review_notes)
-                object.setCustomData("review_date",principal.review_date)
-                object.setCustomData("principal_owner",principal.principal_owner)
-                object.setCustomData("principal_app",principal.principal_app)
-                object.setCustomData("record_key",getSid())
+                object.setCustomData("Server",principal.connection_name);                 
+                object.setCustomData("Account name",principal.principal_name)
+                object.setCustomData("Disabled",principal.disabled)
+                object.setCustomData("Account type",principal.principal_type)
+                object.setCustomData("Review status",principal.review_status)
+                object.setCustomData("Review notes",principal.review_notes)
+                object.setCustomData("Review date",principal.review_date)
+                object.setCustomData("Account owner",principal.principal_owner)
+                object.setCustomData("Application",principal.principal_app)
+                object.setCustomData("Record key",getSid())
                 customService.createCustomObject(object)
             } else {
                 CustomObjectEntity object = customService.findObjectById(principal.record_id)
-                object.setCustomData("connection_name",principal.connection_name)
-                object.setCustomData("principal_name",principal.principal_name)
-                object.setCustomData("disabled",principal.disabled)
-                object.setCustomData("principal_type",principal.principal_type)
-                object.setCustomData("review_status",principal.review_status)                
-                object.setCustomData("review_notes",principal.review_notes)
-                object.setCustomData("review_date",principal.review_date)
-                object.setCustomData("principal_owner",principal.principal_owner)
-                object.setCustomData("principal_app",principal.principal_app)
-                
+                object.setCustomData("Server",principal.connection_name)
+                object.setCustomData("Account name",principal.principal_name)
+                object.setCustomData("Disabled",principal.disabled)
+                object.setCustomData("Account type",principal.principal_type)
+                object.setCustomData("Review status",principal.review_status)                
+                object.setCustomData("Review notes",principal.review_notes)
+                object.setCustomData("Review date",principal.review_date)
+                object.setCustomData("Account owner",principal.principal_owner)
+                object.setCustomData("Application",principal.principal_app)                
                 customService.updateCustomObject(object)
             }
         }
@@ -504,32 +505,32 @@ public class SqlServerLoginAudit {
                 if (log_item.record_id == 0) {
                     CustomObjectEntity object = new CustomObjectEntity()
                     object.setDiscriminator(principalAuditType.getObjectName())
-                    object.setCustomData("connection_name",principal.connection_name)
-                    object.setCustomData("principal_name",principal.principal_name)
-                    object.setCustomData("source_ip",log_item.source_ip)
-                    object.setCustomData("source_host",log_item.source_host)
-                    object.setCustomData("success_logons",log_item.success_logons)
-                    object.setCustomData("last_success_logon",log_item.last_success_logon)
-                    object.setCustomData("failed_logons",log_item.failed_logons)
-                    object.setCustomData("last_failed_logon",log_item.last_failed_logon)
-                    object.setCustomData("review_status",log_item.review_status)
-                    object.setCustomData("review_notes",log_item.review_notes)
-                    object.setCustomData("review_date",log_item.review_date)
-                    object.setCustomData("record_key",getSid())
+                    object.setCustomData("Server",principal.connection_name)
+                    object.setCustomData("Account name",principal.principal_name)
+                    object.setCustomData("Source ip",log_item.source_ip)
+                    object.setCustomData("Source host",log_item.source_host)
+                    object.setCustomData("Success logons",log_item.success_logons)
+                    object.setCustomData("Last success logon",log_item.last_success_logon)
+                    object.setCustomData("Failed logons",log_item.failed_logons)
+                    object.setCustomData("Last failed logon",log_item.last_failed_logon)
+                    object.setCustomData("Review status",log_item.review_status)
+                    object.setCustomData("Review notes",log_item.review_notes)
+                    object.setCustomData("Review date",log_item.review_date)
+                    object.setCustomData("Record key",getSid())
                     customService.createCustomObject(object)
                 } else {
                     CustomObjectEntity object = customService.findObjectById(log_item.record_id)
-                    object.setCustomData("connection_name",principal.connection_name)
-                    object.setCustomData("principal_name",principal.principal_name)
-                    object.setCustomData("source_ip",log_item.source_ip)
-                    object.setCustomData("source_host",log_item.source_host)
-                    object.setCustomData("success_logons",log_item.success_logons)
-                    object.setCustomData("last_success_logon",log_item.last_success_logon)
-                    object.setCustomData("failed_logons",log_item.failed_logons)
-                    object.setCustomData("last_failed_logon",log_item.last_failed_logon)
-                    object.setCustomData("review_status",log_item.review_status)
-                    object.setCustomData("review_notes",log_item.review_notes)
-                    object.setCustomData("review_date",log_item.review_date)
+                    object.setCustomData("Server",principal.connection_name)
+                    object.setCustomData("Account name",principal.principal_name)
+                    object.setCustomData("Source ip",log_item.source_ip)
+                    object.setCustomData("Source host",log_item.source_host)
+                    object.setCustomData("Success logons",log_item.success_logons)
+                    object.setCustomData("Last success logon",log_item.last_success_logon)
+                    object.setCustomData("Failed logons",log_item.failed_logons)
+                    object.setCustomData("Last failed logon",log_item.last_failed_logon)
+                    object.setCustomData("Review status",log_item.review_status)
+                    object.setCustomData("Review notes",log_item.review_notes)
+                    object.setCustomData("Review date",log_item.review_date)
                     customService.updateCustomObject(object)
                 }
             }

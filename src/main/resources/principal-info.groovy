@@ -142,7 +142,13 @@ EXEC sp_MSForEachDB '
 USE [?];
 WITH role_members AS (
 
-SELECT rp.name root_role, rm.role_principal_id, rp.name, rm.member_principal_id,mp.name as member_name, mp.sid, 1 as depth  
+SELECT rp.name root_role, 
+       rm.role_principal_id, 
+       rp.name, 
+       rm.member_principal_id,
+       mp.name as member_name, 
+       mp.sid, 
+       1 as depth  
 FROM sys.database_role_members rm
  inner join sys.database_principals rp on rp.principal_id = rm.role_principal_id
  inner join sys.database_principals mp on mp.principal_id = rm.member_principal_id
@@ -328,4 +334,4 @@ SELECT CASE WHEN P.state_desc = 'GRANT_WITH_GRANT_OPTION' THEN 'GRANT' ELSE P.st
 where not DP.name like '%public%'
 
 
-*/
+*/  
