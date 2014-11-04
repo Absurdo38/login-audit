@@ -259,8 +259,8 @@ public class SqlServerLoginAudit {
 
                 // Load stored principals and logon statistics for the connection
                 customService.getCustomObjectSlice(principalType.getObjectName(), 
-                    new QueryRequest("connection_name=\"${serverName}\"")).each { row -> 
-                    
+                    new QueryRequest("Server=\"${serverName}\"")).each { row -> 
+
                     PrincipalInfo principal = new PrincipalInfo()
                     principal.statistics         = new NameMap<LogRecord>();
                     principal.record_id          = row.getId()
@@ -281,11 +281,11 @@ public class SqlServerLoginAudit {
                 
                 logger.debug("Total principals found ${userMap.size()}")
                 
-                def query = new QueryRequest("connection_name=\"${serverName}\"")
+                def query = new QueryRequest("Server=\"${serverName}\"")
                 customService.getCustomObjectSlice(principalAuditType.getObjectName(), query)
                 .each { row ->
                    
-                    def principal = userMap[row.getCustomData("principal_name")]
+                    def principal = userMap[row.getCustomData("Account name")]
                     // TODO IF PRINCIPAL IS NULL
                     LogRecord log_item = new LogRecord()
                     log_item.record_id          = row.getId()
@@ -300,7 +300,7 @@ public class SqlServerLoginAudit {
                     log_item.updated_at         = row.getUpdated()
                     log_item.updated_by         = row.getUpdateAuthor()
                     
-                    principal.statistics[row.getCustomData("Source ip")] = log_item                    
+                    principal.statistics[row.getCustomData("Source ip")] = log_item
                 }
                 
                 Connection connection = connector.getJdbcConnection(null)
@@ -311,7 +311,7 @@ public class SqlServerLoginAudit {
                 
                 new Sql(connection).eachRow("""SELECT name, type_desc, is_disabled
                                                FROM sys.server_principals 
-                                               WHERE type_desc IN ('SQL_LOGIN','WINDOWS_LOGIN','WINDOWS_GROUP') 
+                                               WHERE type_desc IN ('SQL_LOGIN','WINDOWS_LOGIN','WINDOWS_GROUP')
                                                ORDER BY name""")
                     { row ->
                         def principal = userMap[row.name]
