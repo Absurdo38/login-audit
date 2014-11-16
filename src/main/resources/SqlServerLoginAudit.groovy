@@ -109,8 +109,8 @@ public class SqlServerLoginAudit {
         
             search_results.each { result_item ->  
                 Attributes attributes = result_item.getAttributes()
-                def name = attributes.get("sAMAccountName")?.get();
-                def dn = attributes.get("distinguishedName")?.get();
+                def name = attributes.get("sAMAccountName")?.get()
+                def dn = attributes.get("distinguishedName")?.get()
                 def members = getAll(attributes.get("member"))
                 def member_of = getAll(attributes.get("memberOf"))
                 def title = attributes.get("name")?.get();
@@ -122,10 +122,6 @@ public class SqlServerLoginAudit {
                 ldapAccountByName[name] = account
             }
         }
-    }
-    
-    private static String getSid() {
-        return UUID.randomUUID().toString()
     }
     
     public List<String> getSubGroups (List<String> list, account) {
@@ -144,14 +140,6 @@ public class SqlServerLoginAudit {
         return list
     }
     
-    private CustomFieldConfig newField(String name,Type type, boolean required){
-        CustomFieldConfig config = new CustomFieldConfig();
-        config.setName(name);
-        config.setType(type);
-        config.setRequired(required);
-        return config;
-    }
-
     public List<PrincipalInfo> getLoginAuditList(String[] servers, 
                                                    boolean resolveHosts, 
                                                    String ldapConnection,
@@ -166,13 +154,14 @@ public class SqlServerLoginAudit {
         CustomObjectTypeEntity principalType = types.find { it.getObjectName().equals(principalStorageType)}
         CustomObjectTypeEntity principalAuditType = types.find { it.getObjectName().equals(statisticsStorageType)}
 
-        def createField  = { service, metaType, fieldName, fieldType, required, readonly ->
+        def createField  = { service, metaType, fieldName, fieldType, required, readonly, key = false ->
             CustomFieldConfig field = new CustomFieldConfig()
             field.setName(fieldName)
             field.setType(fieldType)
             field.setRequired(required)
             field.setReadonly(readonly)
-            service.createCustomFieldConfig(metaType,field,false)
+            field.setKey(key)
+            service.createCustomFieldConfig(metaType, field, false)
         }
         
         if (principalType == null) {
@@ -186,19 +175,15 @@ public class SqlServerLoginAudit {
             
             principalType = customService.createCustomObjectType(principalType)
 
-            def key = newField("Record key",Type.STRING,true)
-            key.setKey(true);
-            key.setReadonly(true)
-            cfService.createCustomFieldConfig(principalType,key,false);            
-            createField(cfService, principalType, "Server",Type.STRING,true,true);
-            createField(cfService, principalType, "Account name",Type.STRING,true,true);
-            createField(cfService, principalType, "Disabled",Type.BOOLEAN,false,true);
-            createField(cfService, principalType, "Account type",Type.STRING,false,true);
-            createField(cfService, principalType, "Account owner",Type.STRING,false,false);
-            createField(cfService, principalType, "Application",Type.STRING,false,false);
-            createField(cfService, principalType, "Review status",Type.STRING,false,false);
-            createField(cfService, principalType, "Review date",Type.DATE,false,false);
-            createField(cfService, principalType, "Review notes",Type.TEXT,false,false);
+            createField(cfService, principalType, "Server",Type.STRING,true,true,true)
+            createField(cfService, principalType, "Account name",Type.STRING,true,true,true)
+            createField(cfService, principalType, "Disabled",Type.BOOLEAN,false,true)
+            createField(cfService, principalType, "Account type",Type.STRING,false,true)
+            createField(cfService, principalType, "Account owner",Type.STRING,false,false)
+            createField(cfService, principalType, "Application",Type.STRING,false,false)
+            createField(cfService, principalType, "Review status",Type.STRING,false,false)
+            createField(cfService, principalType, "Review date",Type.DATE,false,false)
+            createField(cfService, principalType, "Review notes",Type.TEXT,false,false)
         }
 
         if (principalAuditType == null) {
@@ -212,22 +197,17 @@ public class SqlServerLoginAudit {
             
             principalAuditType = customService.createCustomObjectType(principalAuditType);
 
-            def key = newField("Record key",Type.STRING,true)
-            key.setKey(true);
-            key.setReadonly(true);
-            cfService.createCustomFieldConfig(principalAuditType, key, false);
-
-            createField(cfService, principalAuditType,"Server",Type.STRING,true,true);
-            createField(cfService, principalAuditType,"Account name",Type.STRING,true,true);
-            createField(cfService, principalAuditType,"Source ip",Type.STRING,true,true);
-            createField(cfService, principalAuditType,"Source host",Type.STRING,false,true);
-            createField(cfService, principalAuditType,"Success logons",Type.INTEGER,false,true);
-            createField(cfService, principalAuditType,"Last success logon",Type.DATE,false,true);
-            createField(cfService, principalAuditType,"Failed logons",Type.INTEGER,false,true);
-            createField(cfService, principalAuditType,"Last failed logon",Type.DATE,false,true);
-            createField(cfService, principalAuditType,"Review status",Type.STRING,false,false);
-            createField(cfService, principalAuditType,"Review date",Type.DATE,false,false);
-            createField(cfService, principalAuditType,"Review notes",Type.TEXT,false,false);
+            createField(cfService, principalAuditType,"Server",Type.STRING,true,true,true)
+            createField(cfService, principalAuditType,"Account name",Type.STRING,true,true,true)
+            createField(cfService, principalAuditType,"Source ip",Type.STRING,true,true,true)
+            createField(cfService, principalAuditType,"Source host",Type.STRING,false,true)
+            createField(cfService, principalAuditType,"Success logons",Type.INTEGER,false,true)
+            createField(cfService, principalAuditType,"Last success logon",Type.DATE,false,true)
+            createField(cfService, principalAuditType,"Failed logons",Type.INTEGER,false,true)
+            createField(cfService, principalAuditType,"Last failed logon",Type.DATE,false,true)
+            createField(cfService, principalAuditType,"Review status",Type.STRING,false,false)
+            createField(cfService, principalAuditType,"Review date",Type.DATE,false,false)
+            createField(cfService, principalAuditType,"Review notes",Type.TEXT,false,false)
         }
                 
         List<PrincipalInfo> result = []
@@ -336,7 +316,6 @@ public class SqlServerLoginAudit {
                 // log number of log files
                 logger.info("Getting number of server log files")
                 int count = getLogFileCount(connection)
-                // if (count > 5) count = 5;
                 
                 // load all logs
                 logger.info("Parsing files")
@@ -482,7 +461,6 @@ public class SqlServerLoginAudit {
                 object.setCustomData("Review date",principal.review_date)
                 object.setCustomData("Account owner",principal.principal_owner)
                 object.setCustomData("Application",principal.principal_app)
-                object.setCustomData("Record key",getSid())
                 customService.createCustomObject(object)
             } else {
                 CustomObjectEntity object = customService.findObjectById(principal.record_id)
@@ -516,7 +494,6 @@ public class SqlServerLoginAudit {
                     object.setCustomData("Review status",log_item.review_status)
                     object.setCustomData("Review notes",log_item.review_notes)
                     object.setCustomData("Review date",log_item.review_date)
-                    object.setCustomData("Record key",getSid())
                     customService.createCustomObject(object)
                 } else {
                     CustomObjectEntity object = customService.findObjectById(log_item.record_id)
