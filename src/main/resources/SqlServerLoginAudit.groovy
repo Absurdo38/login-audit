@@ -38,6 +38,24 @@ public class SqlServerLoginAudit {
                                 "Connection: non-trusted"   : PrincipalType.SQL_LOGIN,
                                 "SQL Server authentication" : PrincipalType.SQL_LOGIN
                               ]
+                              
+    private static class MsgPattern {
+        Pattern pattern
+        boolean success
+        
+        public MsgPattern(String pattern, boolean success) {
+            this.pattern = Pattern.compile(pattern)
+            this.success = success
+        }
+    }
+    
+    def PATTERNS = [
+        new MsgPattern("Login succeeded for user '([^']+)'[^\\[]+\\[CLIENT: ([^\\]]*)\\]\\s*", true),
+        new MsgPattern("Login failed for user '([^']*)'[^\\[]+\\[CLIENT: ([^\\]]*)\\]\\s*", false),
+        new MsgPattern("(user)?The login packet used to open the connection is structurally invalid; the connection has been closed\\. Please contact the vendor of the client library\\. \\[CLIENT: ([^\\]]*)\\]\\s*",false),
+        new MsgPattern("Login failed for user '([^']*)'\\. The user is not associated with a trusted SQL Server connection\\. \\[CLIENT: ([^\\]]*)\\]\\s*",false)
+    ]
+      
     private DbMaster dbm
     private Logger logger
     public  Date since
@@ -88,11 +106,11 @@ public class SqlServerLoginAudit {
     public void setupLdapAccounts(String ldapConnection, String ldapContext) {
         if (ldapConnection!=null) {        
             def ldapSearch = new LdapSearch(dbm,logger)    
-            def ldap_query  = "(|(objectClass=user)(objectClass=group))"
+            def ldapQuery  = "(|(objectClass=user)(objectClass=group))"
             // def ldap_attributes = "member;objectClass;sAMAccountName;distinguishedName;description;memberOf;name"
-            def ldap_attributes = "member;memberOf;sAMAccountName;distinguishedName;name"
+            def ldapAttributes = "member;memberOf;sAMAccountName;distinguishedName;name"
             logger.info("Retrieving ldap accounts and groups")
-            def search_results = ldapSearch.search(ldapConnection, ldapContext, ldap_query, ldap_attributes)
+            def search_results = ldapSearch.search(ldapConnection, ldapContext, ldapQuery, ldapAttributes)
             
             def getAll = { ldapAttribute ->
                 def result = null
@@ -212,7 +230,6 @@ public class SqlServerLoginAudit {
                 
         List<PrincipalInfo> result = []
 
-        Pattern PATTERN = Pattern.compile("Login (succeeded|failed) for user '([^']+)'[^\\[]+\\[CLIENT: ([^\\]]*)\\]\\s*")
         def connectionSrv = dbm.getService(ConnectionService.class)
         
         setupLdapAccounts(ldapConnection,ldapContext)
@@ -327,7 +344,7 @@ public class SqlServerLoginAudit {
                     logger.debug("Parsing file ${i+1} of ${count+1}")
                     statement = connection.createStatement()
                     if (!statement.execute("{call sp_readerrorlog ${i},1,'login'}")) {
-                        logger.warn("Stored procedure did not return a result set for file ${i+1}")
+                        logger.debug("Stored procedure did not return a result set for file ${i+1}")
                         statement.close();
                         continue;
                     }
@@ -335,16 +352,32 @@ public class SqlServerLoginAudit {
                     while (rs.next()) {
                         if ("Logon".equals(rs.getString(2))) {
                             String msg = rs.getString(3)
-                            Matcher matcher = PATTERN.matcher(msg.trim())
-                            if (!matcher.matches()) {
+                            
+                            boolean patternFound = false
+                            boolean success
+                            String user, ip
+                            
+                            PATTERNS.each { p -> 
+                                Matcher matcher = p.pattern.matcher(msg.trim())
+                                if (matcher.matches()) {
+                                    success =  p.success
+                                    user = matcher.group(1)
+                                    ip = matcher.group(2)
+                                    patternFound = true
+                                    return
+                                }
+                            }
+                            
+                            if (!patternFound) { 
                                 // TODO (vitaly) - code below does not work
                                 logger.warn("Unexpected format of login message: '{}'", 
                                             StringEscapeUtils.escapeJavaScript(msg))
                                 continue
                             }
-                            boolean success = "succeeded".equals(matcher.group(1))
-                            String user = matcher.group(2)
-                            String ip = matcher.group(3)
+                            if (user==null) {
+                                 user = "";
+                            }
+
                             Date logRecordTime = rs.getTimestamp(1)
                             
                             PrincipalInfo principal = userMap[user]
