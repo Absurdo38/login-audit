@@ -26,7 +26,7 @@ println "<td>Log Records Since</td>"
 println "</tr>"
 
 def loginAudit =new SqlServerLoginAudit(dbm, logger)
-result = loginAudit.getLoginAuditList(p_servers, p_resolve_hosts, p_ldap_connection, p_ldap_context)
+result = loginAudit.getLoginAuditList(p_servers, p_resolve_hosts)
                                   
 result.each { principal ->
 
@@ -39,8 +39,6 @@ result.each { principal ->
     print "<td rowspan=\"${rows}\">"
     print tool_linker.set("id","db-principal-info")
                      .set("p_server",principal.connection_name)
-                     .set("p_ldap_connection",p_ldap_connection)
-                     .set("p_ldap_context",p_ldap_context)
                      .set("p_principal",principal.principal_name)
                      .render(principal.principal_name).toString()
     if (principal.review_status!=null) {

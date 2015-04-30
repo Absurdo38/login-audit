@@ -3,20 +3,15 @@
         <description>Parses sql server logs files and generates aggregated login statistics</description>
 
         <parameters>
-            <parameter name="p_servers"   title="Servers"   type="string" required="false" multiple="true"
+            <parameter name="p_servers"   title="Database Servers"   type="string" required="false" multiple="true"
                        suggestion="project_connections" width="300" />
-            <parameter name="p_resolve_hosts" title="Resolve hosts" type="boolean" required="true" defaultValue="false" />            
 
-            <parameter name="p_ldap_connection" title="LDAP Connection"    type="string" required="false" 
-                       suggestion="project_connections"  width="300" />
-            <parameter name="p_ldap_context"    title="LDAP Base Context"  type="string" required="false" 
-            width="500" />
+            <parameter name="p_resolve_hosts" title="Resolve hosts" type="boolean" required="true" defaultValue="false" />
         </parameters>
-
         <output  script="sqlserver-login-audit.groovy" type="html" />
     </tool>
 
-    <tool id="db-principal-info" title="Account Info" projectTypes="inventory">
+    <tool id="db-principal-info" title="Account Info" projectTypes="inventory" visible="false">
         <description>Displays information about sql server principal</description>
 
         <parameters>
@@ -24,12 +19,7 @@
                        suggestion="project_connections" width="300" />
 
             <parameter name="p_principal" title="SQL User or group"    type="string" required="true" width="400" />
-            <parameter name="p_ldap_connection" title="LDAP Connection" type="string" required="false"
-                       suggestion="project_connections" width="300" />
-
-            <parameter name="p_ldap_context" title="LDAP Base Context"  type="string" required="false"  width="400" />
         </parameters>
-
         <output  script="principal-info.groovy" type="html" />
     </tool>
 </tools>

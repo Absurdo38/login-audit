@@ -11,6 +11,7 @@ import java.util.logging.Level
 import org.slf4j.Logger
 import org.apache.commons.lang.StringUtils
 import groovy.sql.Sql
+import io.dbmaster.tools.ldap.LdapUserCache
 
 connectionSrv = dbm.getService(ConnectionService.class)
 
@@ -186,13 +187,13 @@ if (rows.size()==0) {
         return "<span style=\"color:#d3d3d3;\">"+attribute+":</span> "+value;
     }
 
-    def printSubGroups (loginAudit, account, level) {
+    def printSubGroups (ldap, account, level) {
         if (account.member_of==null) {
             return
         }
         
         account.member_of.each { member_of_dn ->
-            def group = loginAudit.ldapAccountByDN[member_of_dn]
+            def group = ldap.ldapAccountByDN[member_of_dn]
             if (group == null) {
                 logger.debug("Account for ${member_of_dn} does not exist")
             } else {
@@ -201,46 +202,49 @@ if (rows.size()==0) {
                 def groupName = group.name
                 //if (!list.contains(groupName)) {
                     //list.add(groupName)
-                    printSubGroups(loginAudit, group, level+1)
+                    printSubGroups(ldap, group, level+1)
                 //}
             }
         }
     }
 
-    def printMembers (loginAudit, account, level ) {
+    def printMembers (ldap, account, level ) {
         if (account.members==null) {
             return
         }
 
         account.members.each { member_dn ->
-            def member = loginAudit.ldapAccountByDN[member_dn]
+            def member = ldap.ldapAccountByDN[member_dn]
             if (member == null) {
                 logger.debug("Account for ${member_of_dn} does not exist")
             } else {
                 println  StringUtils.repeat("&nbsp;&nbsp;", level*2) +
                          printAttr("name", member.title)+" " + printAttr("sAMAccountName",member.name)+"<br/>";
-                printMembers(loginAudit, member, level+1)
+                printMembers(ldap, member, level+1)
             }
         }
     }
 
     logger.info("Retrieving active directory information")
-    def loginAudit = new SqlServerLoginAudit(dbm,logger)
-    loginAudit.setupLdapAccounts(p_ldap_connection, p_ldap_context)
+    def ldap = new LdapUserCache(dbm, logger)
+    // def loginAudit = new LdapUserCache(dbm, logger)
+    
+    // ldap.setupLdapAccounts(p_ldap_connection, p_ldap_context)
+    ldap.loadLdapAccounts(connectionSrv)
    
     def idx = p_principal.indexOf('\\')
     def accountName = idx>0 ? p_principal.substring(idx+1) : p_principal
-    def account = loginAudit.ldapAccountByName[accountName]
+    def account = ldap.ldapAccountByName[accountName]
     if (account == null) {
         logger.info("Account ${accountName} not found in active directory")
     } else {
         if (account.member_of!=null && account.member_of.size()>0) {
             println "<h2>Active Directory: Group Membership for ${accountName}</h2>"
-            printSubGroups(loginAudit, account, 0)
+            printSubGroups(ldap, account, 0)
         }
         if (account.members!=null && account.members.size()>0) {
             println "<h2>Active Directory: Members of ${accountName}</h2>"
-            printMembers(loginAudit, account, 0)
+            printMembers(ldap, account, 0)
         }
     }
 

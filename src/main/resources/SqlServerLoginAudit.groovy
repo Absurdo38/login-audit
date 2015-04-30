@@ -30,6 +30,7 @@ import com.branegy.dbmaster.util.NameMap
 import com.branegy.scripting.DbMaster
 import com.branegy.service.connection.api.ConnectionService
 import com.branegy.service.core.QueryRequest
+import io.dbmaster.tools.ldap.LdapUserCache
 
 public class SqlServerLoginAudit { 
     
@@ -62,13 +63,12 @@ public class SqlServerLoginAudit {
     java.sql.Timestamp processTime = new java.sql.Timestamp(new Date().getTime())
     
     
-    public def ldapAccountByDN   = new NameMap()
-    public def ldapAccountByName = new NameMap()
-
+    public LdapUserCache ldap
     
     public SqlServerLoginAudit(DbMaster dbm, Logger logger) {
         this.dbm = dbm
         this.logger = logger
+        this.ldap = new LdapUserCache(dbm, logger)
     }
      
     private static getMaxDate(Date src,Date newDate) {
@@ -101,61 +101,6 @@ public class SqlServerLoginAudit {
         rs.close()
         statement.close()
         return count
-    }
-    
-    public void setupLdapAccounts(String ldapConnection, String ldapContext) {
-        if (ldapConnection!=null) {        
-            def ldapSearch = new LdapSearch(dbm,logger)    
-            def ldapQuery  = "(|(objectClass=user)(objectClass=group))"
-            // def ldap_attributes = "member;objectClass;sAMAccountName;distinguishedName;description;memberOf;name"
-            def ldapAttributes = "member;memberOf;sAMAccountName;distinguishedName;name"
-            logger.info("Retrieving ldap accounts and groups")
-            def search_results = ldapSearch.search(ldapConnection, ldapContext, ldapQuery, ldapAttributes)
-            
-            def getAll = { ldapAttribute ->
-                def result = null
-                if (ldapAttribute!=null) {
-                    result = []
-                    def values = ldapAttribute.getAll()
-                    while (values.hasMore()) {
-                        result.add(values.next().toString())
-                    }
-                }
-                return result
-            }
-            
-        
-            search_results.each { result_item ->  
-                Attributes attributes = result_item.getAttributes()
-                def name = attributes.get("sAMAccountName")?.get()
-                def dn = attributes.get("distinguishedName")?.get()
-                def members = getAll(attributes.get("member"))
-                def member_of = getAll(attributes.get("memberOf"))
-                def title = attributes.get("name")?.get();
-                
-                // def object_class = getAll(attributes.get("objectClass"))
-                
-                def account = [ "name" : name, "dn" : dn, "members" : members, "member_of" : member_of, "title": title]
-                ldapAccountByDN[dn] = account
-                ldapAccountByName[name] = account
-            }
-        }
-    }
-    
-    public List<String> getSubGroups (List<String> list, account) {
-        account.member_of.each { member_of_dn ->
-            def group = ldapAccountByDN[member_of_dn]
-            if (group == null) {
-                logger.debug("Account for ${member_of_dn} does not exist")
-            } else {
-                def groupName = group.name
-                if (!list.contains(groupName)) {
-                    list.add(groupName)
-                    getSubGroups(list,group)
-                }
-            }
-        }
-        return list
     }
     
     public List<PrincipalInfo> getLoginAuditList(String[] servers, 
@@ -232,7 +177,7 @@ public class SqlServerLoginAudit {
 
         def connectionSrv = dbm.getService(ConnectionService.class)
         
-        setupLdapAccounts(ldapConnection,ldapContext)
+        ldap.loadLdapAccounts(connectionSrv)
         
         def dbConnections
         if (servers!=null && servers.size()>0) {
@@ -442,7 +387,7 @@ public class SqlServerLoginAudit {
                 }
                 
                 // calculate groups
-                if (ldapConnection!=null) {
+                
                     userMap.values().each { principal ->
                         if (!principal.principal_type.equals("WINDOWS_GROUP")) {
                             def parts = principal.principal_name.split("\\\\");
@@ -451,9 +396,9 @@ public class SqlServerLoginAudit {
                                 def username = parts[1]
                                 logger.debug("Domain=${domain} user=${username}")
                                 
-                                def ldapAccount = ldapAccountByName[username]
+                            def ldapAccount = ldap.ldapAccountByName[principal.principal_name]
                                 if (ldapAccount!=null) {
-                                    def groups = getSubGroups([], ldapAccount);
+                                def groups = ldap.getSubGroups([], ldapAccount);
                                     groups.each { group ->
                                         def fullName = domain + "\\" + group;
                                         if (userMap[fullName]!=null) {
@@ -465,7 +410,7 @@ public class SqlServerLoginAudit {
                             }
                         }
                     }
-                }
+                
             } catch (CancellationException e) {
                 throw e;
             } catch (Exception e) {
