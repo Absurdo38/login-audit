@@ -9,11 +9,8 @@ import java.util.concurrent.CancellationException
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-import io.dbmaster.tools.ldap.LdapSearch
-
-import javax.naming.*
-import javax.naming.directory.*
-import javax.naming.ldap.*
+import io.dbmaster.tools.LdapSearch
+import io.dbmaster.tools.LdapUserCache
 
 import org.slf4j.Logger
 
@@ -30,7 +27,7 @@ import com.branegy.dbmaster.util.NameMap
 import com.branegy.scripting.DbMaster
 import com.branegy.service.connection.api.ConnectionService
 import com.branegy.service.core.QueryRequest
-import io.dbmaster.tools.ldap.LdapUserCache
+
 
 public class SqlServerLoginAudit { 
     
@@ -104,9 +101,7 @@ public class SqlServerLoginAudit {
     }
     
     public List<PrincipalInfo> getLoginAuditList(String[] servers, 
-                                                   boolean resolveHosts, 
-                                                   String ldapConnection,
-                                                   String ldapContext) {
+                                                 boolean resolveHosts) {
                                                    
         def principalStorageType = "sql account";
         def statisticsStorageType = "sql account statistics";
@@ -218,6 +213,9 @@ public class SqlServerLoginAudit {
                     principal.updated_at         = row.getUpdated()
                     principal.updated_by         = row.getUpdateAuthor()
                     
+                    if (principal.principal_name == null) {
+                        principal.principal_name = "";
+                    }                    
                     userMap[principal.principal_name] = principal
                 }
                 
@@ -226,23 +224,25 @@ public class SqlServerLoginAudit {
                 def query = new QueryRequest("Server=\"${serverName}\"")
                 customService.getCustomObjectSlice(principalAuditType.getObjectName(), query)
                 .each { row ->
-                   
-                    def principal = userMap[row.getCustomData("Account name")]
-                    // TODO IF PRINCIPAL IS NULL
-                    LogRecord log_item = new LogRecord()
-                    log_item.record_id          = row.getId()
-                    log_item.source_ip          = row.getCustomData("Source ip")
-                    log_item.success_logons     = 0 // row.success_logons
-                    log_item.last_success_logon = null // row.last_success_logon
-                    log_item.failed_logons      = 0 // row.failed_logons
-                    log_item.last_failed_logon  = null // row.last_failed_logon
-                    log_item.review_status      = row.getCustomData("Review status")
-                    log_item.review_notes       = row.getCustomData("Review notes")
-                    log_item.review_date        = row.getCustomData("Review date")
-                    log_item.updated_at         = row.getUpdated()
-                    log_item.updated_by         = row.getUpdateAuthor()
-                    
-                    principal.statistics[row.getCustomData("Source ip")] = log_item
+                    def accountName = row.getCustomData("Account name")
+                    if (accountName!=null) {
+                        def principal = userMap[accountName]
+                        // TODO IF PRINCIPAL IS NULL
+                        LogRecord log_item = new LogRecord()
+                        log_item.record_id          = row.getId()
+                        log_item.source_ip          = row.getCustomData("Source ip")
+                        log_item.success_logons     = 0 // row.success_logons
+                        log_item.last_success_logon = null // row.last_success_logon
+                        log_item.failed_logons      = 0 // row.failed_logons
+                        log_item.last_failed_logon  = null // row.last_failed_logon
+                        log_item.review_status      = row.getCustomData("Review status")
+                        log_item.review_notes       = row.getCustomData("Review notes")
+                        log_item.review_date        = row.getCustomData("Review date")
+                        log_item.updated_at         = row.getUpdated()
+                        log_item.updated_by         = row.getUpdateAuthor()
+                        
+                        principal.statistics[row.getCustomData("Source ip")] = log_item
+                    }
                 }
                 
                 Connection connection = connector.getJdbcConnection(null)

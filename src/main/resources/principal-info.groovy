@@ -11,7 +11,7 @@ import java.util.logging.Level
 import org.slf4j.Logger
 import org.apache.commons.lang.StringUtils
 import groovy.sql.Sql
-import io.dbmaster.tools.ldap.LdapUserCache
+import io.dbmaster.tools.LdapUserCache
 
 connectionSrv = dbm.getService(ConnectionService.class)
 
@@ -227,9 +227,6 @@ if (rows.size()==0) {
 
     logger.info("Retrieving active directory information")
     def ldap = new LdapUserCache(dbm, logger)
-    // def loginAudit = new LdapUserCache(dbm, logger)
-    
-    // ldap.setupLdapAccounts(p_ldap_connection, p_ldap_context)
     ldap.loadLdapAccounts(connectionSrv)
    
     def idx = p_principal.indexOf('\\')
